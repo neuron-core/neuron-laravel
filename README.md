@@ -19,7 +19,7 @@ and other useful helpers.
 
 Neuron is the leading PHP framework for creating and orchestrating AI Agents. It allows you to integrate AI entities in your
 PHP applications with a powerful and flexible architecture. We provide tools for the entire agentic application development lifecycle,
-from LLM interfaces, to data loading, to multi-agent orchestration, to monitoring and debugging.
+from LLM interfaces, data loading, to multi-agent orchestration, monitoring and debugging.
 In addition, we provide tutorials and other educational content to help you get started using AI Agents in your projects.
 
 [**Laravel Tutorial**](https://www.youtube.com/watch?v=oSA1bP_j41w)
