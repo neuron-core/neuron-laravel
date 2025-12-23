@@ -107,6 +107,8 @@ Neuron provides you with a built-in system to manage the memory of a chat sessio
 In many Q&A applications you can have a back-and-forth conversation with the LLM, meaning the application needs some sort 
 of "memory" of past questions and answers, and some logic for incorporating those into its current thinking.
 
+Here is the documentation: **https://docs.neuron-ai.dev/the-basics/chat-history-and-memory**
+
 The package ships with a ready-to-use migration for the `ElquentChatHistory` component. Here is the command to copy the migration
 in your project `database/migrations/neuron` folder:
 
