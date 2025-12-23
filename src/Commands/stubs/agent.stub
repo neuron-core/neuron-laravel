@@ -1,0 +1,36 @@
+<?php
+
+declare(strict_types=1);
+
+namespace [namespace];
+
+use NeuronAI\Agent;
+use NeuronAI\Laravel\AIProvider;
+use NeuronAI\Providers\AIProviderInterface;
+use NeuronAI\SystemPrompt;
+use NeuronAI\Tools\ToolInterface;
+use NeuronAI\Tools\ToolkitInterface;
+
+class [classname] extends Agent
+{
+    protected function provider(): AIProviderInterface
+    {
+        // return an instance of Anthropic, OpenAI, Gemini, Ollama, etc...
+        return AIProvider::driver();
+    }
+
+    public function instructions(): string
+    {
+        return (string) new SystemPrompt(
+            ...config('neuron.system_prompt')
+        );
+    }
+
+    /**
+     * @return ToolInterface[]|ToolkitInterface[]
+     */
+    protected function tools(): array
+    {
+        return [];
+    }
+}
