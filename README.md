@@ -27,6 +27,8 @@ Install the latest version by:
 composer require neuron-core/neuron-laravel
 ```
 
+<a name="configuration"></a>
+
 ## Configuration file
 
 If you want to customize the configuration file beyond the environment variables, you can copy the package configuration file
@@ -35,6 +37,8 @@ in your project `config/neuron.php` folder:
 ```
 php artisan vendor:publish --tag=neuron-config
 ```
+
+<a name="agent"></a>
 
 ## Create an Agent
 
@@ -47,16 +51,30 @@ php artisan neuron:agent MyAgent
 This will create a new agent class in your `app/Neuron/Agents` folder with the name `MyAgent.php` and a couple of 
 basic methods inside.
 
+<a name="providers"></a>
+
 ## AI Providers
 
-The configuration file allows you to configure the default AI provider you want to use in your agents, and the 
-connection parameters (AP key, model, etc.) for all the providers you want to use.
+To get an instance of AI provider to be used in your agents, you can use the `NeuronAI\Laravel\AIProvider` service class.
+It allows you to get an instance of the provider based on the configuration file.
 
-Neuron allows you to implement AI agents using many different providers, like Anthropic, Gemini, OpenAI, Ollama, Mistral and many more.
+```php
+use NeuronAI\Laravel\AIProvider;
+
+// Get the default provider
+$provider = AIProvider::driver();
+
+// Get a specific provider instance
+$provider = AIProvider::driver('anthropic');
+```
+
+The configuration file allows you to configure the default AI provider you want to use in your agents, and the 
+connection parameters (API key, model, etc.) for all the providers you want to use.
+
+Neuron allows you to implement AI agents using many different providers, like Anthropic, Gemini, OpenAI, Ollama, Mistral, and many more.
 Learn more about supported providers in the Neuron AI documentation: **https://docs.neuron-ai.dev/the-basics/ai-provider**
 
 You can configure the appropriate API key in your environment file:
-
 
 ```dotenv
 # Support for: anthropic, gemini, openai, openai-responses, mistral, ollama, huggingface, deepseek
@@ -69,6 +87,8 @@ MISTRAL_KEY=
 OLLAMA_URL=
 # And many others
 ```
+
+<a name="migrations"></a>
 
 ## Migrations
 
@@ -86,7 +106,3 @@ php artisan migrate --path=/database/migrations/my-package
 ```
 
 Read more about Eloquent Chat History in the Neuron AI documentation: **https://docs.neuron-ai.dev/the-basics/chat-history-and-memory#eloquentchathisotry**
-
-
-
-

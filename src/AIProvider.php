@@ -15,6 +15,9 @@ use NeuronAI\Providers\Ollama\Ollama;
 use NeuronAI\Providers\OpenAI\OpenAI;
 use NeuronAI\Providers\OpenAI\Responses\OpenAIResponses;
 
+/**
+ * @method static AIProviderInterface driver(string $driver = null)
+ */
 class AIProvider extends Manager
 {
     public function getDefaultDriver(): string
