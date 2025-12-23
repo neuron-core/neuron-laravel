@@ -1,0 +1,23 @@
+<?php
+
+declare(strict_types=1);
+
+namespace {{namespace}};
+
+use NeuronAI\Workflow\Workflow;
+use NeuronAI\Workflow\Node;
+
+class {{class}} extends Workflow
+{
+    /**
+     * Returns an array of nodes that make up the workflow.
+     *
+     * @return Node[]
+     */
+    protected function nodes(): array
+    {
+        return [
+            // new InitialNode(),
+        ];
+    }
+}

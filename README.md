@@ -106,3 +106,28 @@ php artisan migrate --path=/database/migrations/my-package
 ```
 
 Read more about Eloquent Chat History in the Neuron AI documentation: **https://docs.neuron-ai.dev/the-basics/chat-history-and-memory#eloquentchathisotry**
+
+## Artisan Commands
+
+The package ships with a few artisan commands to reduce boilerplate code and make the setup process easier for the most common 
+Neuron AI components.
+
+```
+# Create an agent
+php artisan neuron:agent MyAgent
+
+# Create a RAG
+php artisan neuron:agent MyRAG
+
+# Create a tool
+php artisan neuron:tool MyTool
+
+# Create a workflow
+php artisan neuron:workflow MyWorkflow
+
+# Create a node
+php artisan neuron:node CustomNode
+
+# Create a middleware
+php artisan neuron:middleware CustomMiddleware
+```
