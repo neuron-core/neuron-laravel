@@ -2,16 +2,16 @@
 
 declare(strict_types=1);
 
-namespace [namespace];
+namespace {{namespace}};
 
 use NeuronAI\Agent;
 use NeuronAI\Laravel\AIProvider;
 use NeuronAI\Providers\AIProviderInterface;
 use NeuronAI\SystemPrompt;
 use NeuronAI\Tools\ToolInterface;
-use NeuronAI\Tools\ToolkitInterface;
+use NeuronAI\Tools\Toolkits\ToolkitInterface;
 
-class [classname] extends Agent
+class {{classname}} extends Agent
 {
     protected function provider(): AIProviderInterface
     {
