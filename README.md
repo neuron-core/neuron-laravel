@@ -9,7 +9,7 @@ The package is built to help developers during the initial setup and configurati
 it's not meant to completely wrap the Neuron AI architecture. 
 Neuron doesn't need such invasive abstractions, it already has a very simple syntax, 100% typed code, and clear interfaces you can rely on to integrate or create custom plugins and extensions. 
 
-In this package we provide you with a development kit specifically designed for Laravel environments without con straining Neuron native API. 
+In this package we provide you with a development kit specifically designed for Laravel integration points without limiting the access to the Neuron native API. 
 
 You can find a ready-to-use configuration file, a few artisan commands to reduce boilerplate code, 
 a service class to get an instance of the AI provider with the classic Laravel configuration-driven approach.
