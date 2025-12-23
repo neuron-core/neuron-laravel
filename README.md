@@ -103,6 +103,10 @@ OLLAMA_URL=
 
 ## EloquentChatHistory
 
+Neuron provides you with a built-in system to manage the memory of a chat session you perform with the agent.
+In many Q&A applications you can have a back-and-forth conversation with the LLM, meaning the application needs some sort 
+of "memory" of past questions and answers, and some logic for incorporating those into its current thinking.
+
 The package ships with a ready-to-use migration for the `ElquentChatHistory` component. Here is the command to copy the migration
 in your project `database/migrations/neuron` folder:
 
@@ -116,7 +120,7 @@ And then run the migrations:
 php artisan migrate --path=/database/migrations/my-package
 ```
 
-Read more about Eloquent Chat History in the Neuron AI documentation: **https://docs.neuron-ai.dev/the-basics/chat-history-and-memory#eloquentchathisotry**
+Read more about **Eloquent Chat History** in the Neuron AI documentation: **https://docs.neuron-ai.dev/the-basics/chat-history-and-memory#eloquentchathisotry**
 
 ## Artisan Commands
 
