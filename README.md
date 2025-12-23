@@ -1,13 +1,18 @@
 # Utility Package for using Neuron in Laravel applications
 
-This package provides some useful helpers and configuration options to get started with Neuron AI 
-in a more familiar way for Laravel developers. The package is built to help developers during the 
-initial setup and configuration of their projects, it's not meant to be a complete replacement for the 
-Neuron AI components. Neuron doesn't need such invasive abstractions. They can only be an obstacle to learning and using the AI components 
-or for modeling your agentic logic.
+> [!IMPORTANT]
+> Get early access to new features, exclusive tutorials, and expert tips for building AI agents in PHP. Join a community of PHP developers pioneering the future of AI development.
+> [Subscribe to the newsletter](https://neuron-ai.dev)
 
-In this package we provide you with a ready-to-use configuration file, artisan command to quickly create a new AI agent, 
-workflow, middleware, and other components. You can also find ready-to-run migration if you want to use the Eloquent Chat History component, 
+This package aims to make it easier for Laravel developers to get started with AI agent development using Neuron AI framework. 
+The package is built to help developers during the initial setup and configuration of their projects, 
+it's not meant to be a complete replacement for the Neuron AI architecture. 
+Neuron doesn't need such invasive abstractions, and at the end of the day they can quickly become an obstacle 
+to model your agentic application features.
+
+In this package we provide you with a ready-to-use configuration file, a few artisan commands to reduce boilerplate code, 
+a service class to get an instance of the AI provider with the classic Laravel configuration-driven approach.
+You can also find ready-to-run migration if you want to use the Eloquent Chat History component, 
 and other useful helpers.
 
 ## What is Neuron?
