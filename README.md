@@ -17,7 +17,7 @@ and other useful helpers.
 
 ## What is Neuron?
 
-Neuron is a PHP framework for creating and orchestrating AI Agents. It allows you to integrate AI entities in your
+Neuron is the leading PHP framework for creating and orchestrating AI Agents. It allows you to integrate AI entities in your
 PHP applications with a powerful and flexible architecture. We provide tools for the entire agentic application development lifecycle,
 from LLM interfaces, to data loading, to multi-agent orchestration, to monitoring and debugging.
 In addition, we provide tutorials and other educational content to help you get started using AI Agents in your projects.
