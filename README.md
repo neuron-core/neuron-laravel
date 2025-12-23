@@ -6,11 +6,12 @@
 
 This package aims to make it easier for Laravel developers to get started with AI agent development using Neuron AI framework. 
 The package is built to help developers during the initial setup and configuration of their projects, 
-it's not meant to be a complete replacement for the Neuron AI architecture. 
-Neuron doesn't need such invasive abstractions, and at the end of the day they can quickly become an obstacle 
-to model your agentic application features.
+it's not meant to completely wrap the Neuron AI architecture. 
+Neuron doesn't need such invasive abstractions, it already has a very simple syntax, 100% typed code, and clear interfaces you can rely on to integrate or create custom plugins and extensions. 
 
-In this package we provide you with a ready-to-use configuration file, a few artisan commands to reduce boilerplate code, 
+In this package we provide you with a development kit specifically designed for Laravel environments without con straining Neuron native API. 
+
+You can find a ready-to-use configuration file, a few artisan commands to reduce boilerplate code, 
 a service class to get an instance of the AI provider with the classic Laravel configuration-driven approach.
 You can also find ready-to-run migration if you want to use the Eloquent Chat History component, 
 and other useful helpers.
@@ -124,7 +125,7 @@ php artisan vendor:publish --tag=neuron-migrations
 And then run the migrations:
 
 ```
-php artisan migrate --path=/database/migrations/my-package
+php artisan migrate --path=/database/migrations/neuron
 ```
 
 Read more about **Eloquent Chat History** in the Neuron AI documentation: **https://docs.neuron-ai.dev/the-basics/chat-history-and-memory#eloquentchathisotry**
