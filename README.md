@@ -10,6 +10,17 @@ In this package we provide you with a ready-to-use configuration file, artisan c
 workflow, middleware, and other components. You can also find ready-to-run migration if you want to use the Eloquent Chat History component, 
 and other useful helpers.
 
+## What is Neuron?
+
+Neuron is a PHP framework for creating and orchestrating AI Agents. It allows you to integrate AI entities in your existing
+PHP applications with a powerful and flexible architecture. We provide tools for the entire agentic application development lifecycle,
+from LLM interfaces, to data loading, to multi-agent orchestration, to monitoring and debugging.
+In addition, we provide tutorials and other educational content to help you get started using AI Agents in your projects.
+
+[**Laravel Tutorial**](https://www.youtube.com/watch?v=oSA1bP_j41w)
+
+[![Neuron & Inspector](./docs/images/youtube.png)](https://www.youtube.com/watch?v=oSA1bP_j41w)
+
 <a name="requirements"></a>
 
 ## Requirements
