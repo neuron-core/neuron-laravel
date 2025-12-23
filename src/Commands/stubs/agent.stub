@@ -11,7 +11,7 @@ use NeuronAI\SystemPrompt;
 use NeuronAI\Tools\ToolInterface;
 use NeuronAI\Tools\Toolkits\ToolkitInterface;
 
-class {{classname}} extends Agent
+class {{class}} extends Agent
 {
     protected function provider(): AIProviderInterface
     {
