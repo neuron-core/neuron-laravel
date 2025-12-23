@@ -31,7 +31,7 @@ class NeuronAIServiceProvider extends ServiceProvider
     public function register(): void
     {
         // Default package configuration
-        $this->mergeConfigFrom(__DIR__ . '/../config/inspector.php', 'inspector');
+        $this->mergeConfigFrom(__DIR__ . '/../config/neuron.php', 'neuron');
 
         $this->app->singleton(AIProvider::class);
     }
