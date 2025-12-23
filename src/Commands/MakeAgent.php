@@ -14,6 +14,10 @@ class MakeAgent extends GeneratorCommand
 
     protected $type = 'Neuron Agent';
 
+    /**
+     * @param string $rootNamespace
+     * @phpstan-ignore-next-line
+     */
     protected function getDefaultNamespace($rootNamespace): string
     {
         return $rootNamespace.'\\Neuron\\Agents';

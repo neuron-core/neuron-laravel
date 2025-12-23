@@ -14,6 +14,10 @@ class MakeNode extends GeneratorCommand
 
     protected $type = 'Neuron Node';
 
+    /**
+     * @param string $rootNamespace
+     * @phpstan-ignore-next-line
+     */
     protected function getDefaultNamespace($rootNamespace): string
     {
         return $rootNamespace.'\\Neuron\\Workflow';

@@ -14,6 +14,10 @@ class MakeMiddleware extends GeneratorCommand
 
     protected $type = 'Neuron Middleware';
 
+    /**
+     * @param string $rootNamespace
+     * @phpstan-ignore-next-line
+     */
     protected function getDefaultNamespace($rootNamespace): string
     {
         return $rootNamespace.'\\Neuron\\Middleware';
