@@ -90,7 +90,7 @@ OLLAMA_URL=
 
 <a name="migrations"></a>
 
-## Migrations
+## EloquentChatHistory
 
 The package ships with a ready-to-use migration for the `ElquentChatHistory` component. Here is the command to copy the migration
 in your project `database/migrations/neuron` folder:
