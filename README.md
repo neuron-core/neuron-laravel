@@ -1,6 +1,14 @@
 # Utility Package for using Neuron in Laravel applications
 
-This package provides some useful helpers and configuration options for Laravel applications.
+This package provides some useful helpers and configuration options to get started with Neuron AI 
+in a more familiar way for Laravel developers. The package is built to help developers during the 
+initial setup and configuration of their projects, it's not meant to be a complete replacement for the 
+Neuron AI components. Neuron doesn't need such invasive abstractions. They can only be an obstacle to learning and using the AI components 
+or for modeling your agentic logic.
+
+In this package we provide you with a ready-to-use configuration file, artisan command to quickly create a new AI agent, 
+workflow, middleware, and other components. You can also find ready-to-run migration if you want to use the Eloquent Chat History component, 
+and other useful helpers.
 
 <a name="requirements"></a>
 
@@ -27,6 +35,17 @@ in your project `config/neuron.php` folder:
 ```
 php artisan vendor:publish --tag=neuron-config
 ```
+
+## Create an Agent
+
+To create a new AI agent, run the following command:
+
+```
+php artisan neuron:agent MyAgent
+```
+
+This will create a new agent class in your `app/Neuron/Agents` folder with the name `MyAgent.php` and a couple of 
+basic methods inside.
 
 ## AI Providers
 

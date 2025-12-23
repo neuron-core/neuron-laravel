@@ -14,6 +14,11 @@ class MakeAgent extends GeneratorCommand
 
     protected $type = 'Agent';
 
+    protected function getDefaultNamespace($rootNamespace): string
+    {
+        return $rootNamespace.'\\Neuron\\Agents';
+    }
+
     protected function getStub(): string
     {
         return __DIR__.'/stubs/agent.stub';
