@@ -72,8 +72,10 @@ basic methods inside.
 
 ## AI Providers
 
-To get an instance of AI provider to be used in your agents, you can use the `NeuronAI\Laravel\AIProvider` service class.
-It allows you to get an instance of the provider based on the configuration file.
+Neuron allows you to implement AI agents using many different providers, like Anthropic, Gemini, OpenAI, Ollama, Mistral, and many more.
+Learn more about supported providers in the Neuron AI documentation: **https://docs.neuron-ai.dev/the-basics/ai-provider** 
+
+To get an instance of the AI Provider you want to attach to your agent, you can use the `NeuronAI\Laravel\AIProvider` service class.
 
 ```php
 use NeuronAI\Laravel\AIProvider;
@@ -88,9 +90,6 @@ $provider = AIProvider::driver('anthropic');
 The configuration file allows you to configure the default AI provider you want to use in your agents, and the 
 connection parameters (API key, model, etc.) for all the providers you want to use.
 
-Neuron allows you to implement AI agents using many different providers, like Anthropic, Gemini, OpenAI, Ollama, Mistral, and many more.
-Learn more about supported providers in the Neuron AI documentation: **https://docs.neuron-ai.dev/the-basics/ai-provider**
-
 You can configure the appropriate API key in your environment file:
 
 ```dotenv
@@ -98,10 +97,20 @@ You can configure the appropriate API key in your environment file:
 NEURON_PROVIDER=anthropic
 
 ANTHROPIC_KEY=
+ANTHROPIC_MODEL=
+
 GEMINI_KEY=
+GEMINI_MODEL=
+
 OPENAI_KEY=
+OPENAI_MODEL=
+
 MISTRAL_KEY=
+MISTRAL_MODEL=
+
 OLLAMA_URL=
+OLLAMA_MODEL=
+
 # And many others
 ```
 
