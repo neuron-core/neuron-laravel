@@ -1,4 +1,4 @@
-# Utility Package for using Neuron in Laravel applications
+# Neuron AI Laravel SDK
 
 > [!IMPORTANT]
 > Get early access to new features, exclusive tutorials, and expert tips for building AI agents in PHP. Join a community of PHP developers pioneering the future of AI development.
