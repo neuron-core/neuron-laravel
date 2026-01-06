@@ -5,7 +5,8 @@ declare(strict_types=1);
 namespace NeuronAI\Laravel;
 
 use Illuminate\Support\Manager;
-use NeuronAI\RAG\VectorStore\ElasticsearchVectorStore;
+use NeuronAI\RAG\VectorStore\ChromaVectorStore;
+use NeuronAI\RAG\VectorStore\FileVectorStore;
 use NeuronAI\RAG\VectorStore\MeilisearchVectorStore;
 use NeuronAI\RAG\VectorStore\PineconeVectorStore;
 use NeuronAI\RAG\VectorStore\QdrantVectorStore;
@@ -19,6 +20,11 @@ class VectorStoreManager extends Manager
     public function getDefaultDriver(): string
     {
         return config('neuron.embedding.default');
+    }
+
+    public function createFileDriver(): VectorStoreInterface
+    {
+        return new FileVectorStore(...$this->config['neuron.store.file']);
     }
 
     public function createPineconeDriver(): VectorStoreInterface
@@ -36,8 +42,8 @@ class VectorStoreManager extends Manager
         return new MeilisearchVectorStore(...$this->config['neuron.store.meilisearch']);
     }
 
-    public function createElasticDriver(): VectorStoreInterface
+    public function createChromaDriver(): VectorStoreInterface
     {
-        return new ElasticsearchVectorStore(...$this->config['neuron.store.elastic']);
+        return new ChromaVectorStore(...$this->config['neuron.store.chroma']);
     }
 }

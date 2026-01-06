@@ -7,8 +7,25 @@ use NeuronAI\Providers\HuggingFace\InferenceProvider;
 return [
     /*
     |--------------------------------------------------------------------------
+    | System prompt
+    |--------------------------------------------------------------------------
+    |
+    | You can configure a system prompt to be used by default across multiple AI Agents.
+    |
+    */
+
+    'system_prompt' => [
+        'background' => 'You are a helpful AI assistant built with Neuron AI framework.',
+        'steps' => [],
+        'output' => [],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | AI Provider
     |--------------------------------------------------------------------------
+    |
+    | https://docs.neuron-ai.dev/the-basics/ai-provider
     |
     | Configure the default provider to use for AI generation.
     |
@@ -73,6 +90,18 @@ return [
         ],*/
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Embedding Provider
+    |--------------------------------------------------------------------------
+    |
+    | https://docs.neuron-ai.dev/rag/embeddings-provider
+    |
+    | Embedding provider is a fundamental component of a RAG system.
+    | Here is where you can configure the embedding provider you want to connect your RAG with.
+    |
+    */
+
     'embedding' => [
         'default' => env('NEURON_EMBEDDING_PROVIDER'),
 
@@ -94,6 +123,12 @@ return [
             'parameters' => [],
         ],
 
+        'voyage' => [
+            'key' => env('VOYAGE_KEY'),
+            'model' => env('VOYAGE_EMBEDDING_MODEL', 'voyage-2-embed-v1'),
+            'dimensions' => null,
+        ],
+
         'mistral' => [
             'baseUri' => env('MISTRAL_BASE_URI', 'https://api.mistral.ai/v1/embeddings'),
             'key' => env('MISTRAL_KEY'),
@@ -104,16 +139,57 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | System prompt
+    | Vector Store
     |--------------------------------------------------------------------------
     |
-    | You can configure a system prompt to be used by default across multiple AI Agents.
+    | https://docs.neuron-ai.dev/rag/vector-store
+    |
+    | Vector Store is the database for embedded pieces of contents where your RAG performs Retrieval
+    | before answering a user question. Here is where you can configure the vector store you want to connect your RAG with.
     |
     */
 
-    'system_prompt' => [
-        'background' => 'You are a helpful AI assistant built with Neuron AI framework.',
-        'steps' => [],
-        'output' => [],
+    'store' => [
+        'default' => env('NEURON_STORE_PROVIDER', 'file'),
+
+        'file' => [
+            'directory' => storage_path('neuron'),
+            'topK' => 5,
+            'name' => 'neuron',
+            'ext' => '.store',
+        ],
+
+        'pinecone' => [
+            'key' => env('PINECONE_KEY'),
+            'indexUrl' => env('PINECONE_INDEX_URL'),
+            'topK' => 5,
+            'version' => '2025-04',
+            'namespace' => '__default__',
+        ],
+
+        'qdrant' => [
+            'collectionUrl' => env('QDRANT_COLLECTION_URL'),
+            'key' => env('QDRANT_KEY'),
+            'topK' => 5,
+            'dimension' => 1024,
+        ],
+
+        'meilisearch' => [
+            'indexUid' => env('MEILISEARCH_INDEX_UID'),
+            'host' => env('MEILISEARCH_HOST', 'http://localhost:7700'),
+            'key' => env('MEILISEARCH_KEY'),
+            'embedder' => 'default',
+            'topK' => 5,
+            'dimension' => 1024,
+        ],
+
+        'chroma' => [
+            'collectionUrl' => env('CHROMA_COLLECTION'),
+            'host' => env('CHROMA_HOST', 'http://localhost:7700'),
+            'tenant' => env('CHROMA_TENANT', 'default_tenant'),
+            'database' => env('CHROMA_DATABASE', 'default_database'),
+            'key' => env('CHROMA_KEY'),
+            'topK' => 5,
+        ],
     ],
 ];

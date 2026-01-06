@@ -102,20 +102,32 @@ php artisan neuron:middleware CustomMiddleware
 Neuron allows you to implement AI agents using many different providers, like Anthropic, Gemini, OpenAI, Ollama, Mistral, and many more.
 Learn more about supported providers in the Neuron AI documentation: **https://docs.neuron-ai.dev/the-basics/ai-provider** 
 
-To get an instance of the AI Provider you want to attach to your agent, you can use the `NeuronAI\Laravel\AIProvider` service class.
+To get an instance of the AI Provider you want to attach to your agent, you can use the `NeuronAI\Laravel\Facades\AIProvider` facade.
 
 ```php
-use NeuronAI\Laravel\AIProviderManager;
+namespace App\Neuron;
 
-// Get the default provider
-$provider = AIProviderManager::driver();
+use NeuronAI\Agent;
+use NeuronAI\SystemPrompt;
+use NeuronAI\Laravel\Facades\AIProvider;
+use NeuronAI\Providers\AIProviderInterface;
 
-// Get a specific provider instance
-$provider = AIProviderManager::driver('anthropic');
+class YouTubeAgent extends Agent
+{
+    protected function provider(): AIProviderInterface
+    {
+        // return an instance of Anthropic, OpenAI, Gemini, Ollama, etc...
+        return AIProvider::driver('anthropic');
+    }
+    
+    public function instructions(): string
+    {
+        return (string) new SystemPrompt(...config('neuron.system_prompt');
+    }
+}
 ```
 
-The configuration file allows you to configure the default AI provider you want to use in your agents, and the 
-connection parameters (API key, model, etc.).
+You can see all the available providers in the documentation: **https://docs.neuron-ai.dev/the-basics/ai-provider**
 
 You can configure the appropriate API key in your environment file:
 
@@ -151,7 +163,34 @@ and vector store you want to use in your RAG agents, and the connection paramete
 Here is an example of how to configure the embedding provider and vector store in the RAG component:
 
 ```php
+namespace App\Neuron;
 
+use NeuronAI\Laravel\Facades\AIProvider;
+use NeuronAI\Laravel\Facades\VectorStore;use NeuronAI\Providers\AIProviderInterface;
+use NeuronAI\Providers\Anthropic\Anthropic;
+use NeuronAI\RAG\Embeddings\EmbeddingsProviderInterface;
+use NeuronAI\RAG\Embeddings\OpenAIEmbeddingsProvider;
+use NeuronAI\RAG\RAG;
+use NeuronAI\RAG\VectorStore\FileVectorStore;
+use NeuronAI\RAG\VectorStore\VectorStoreInterface;
+
+class MyChatBot extends RAG
+{
+    protected function provider(): AIProviderInterface
+    {
+        return AIProvider::driver('anthropic');
+    }
+    
+    protected function embeddings(): EmbeddingsProviderInterface
+    {
+        return EmbeddingProvider::driver('openai');
+    }
+    
+    protected function vectorStore(): VectorStoreInterface
+    {
+        return VectorStore::driver('file');
+    }
+}
 ```
 
 

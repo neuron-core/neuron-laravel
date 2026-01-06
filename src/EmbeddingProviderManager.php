@@ -10,6 +10,7 @@ use NeuronAI\RAG\Embeddings\GeminiEmbeddingsProvider;
 use NeuronAI\RAG\Embeddings\OllamaEmbeddingsProvider;
 use NeuronAI\RAG\Embeddings\OpenAIEmbeddingsProvider;
 use NeuronAI\RAG\Embeddings\OpenAILikeEmbeddings;
+use NeuronAI\RAG\Embeddings\VoyageEmbeddingsProvider;
 
 /**
  * @method static EmbeddingsProviderInterface driver(string $driver = null)
@@ -34,6 +35,11 @@ class EmbeddingProviderManager extends Manager
     public function createOllamaDriver(): EmbeddingsProviderInterface
     {
         return new OllamaEmbeddingsProvider(...$this->config['neuron.embedding.ollama']);
+    }
+
+    public function createVoyageDriver(): EmbeddingsProviderInterface
+    {
+        return new VoyageEmbeddingsProvider(...$this->config['neuron.embedding.voyage']);
     }
 
     public function createMistralDriver(): EmbeddingsProviderInterface
