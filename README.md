@@ -166,12 +166,11 @@ Here is an example of how to configure the embedding provider and vector store i
 namespace App\Neuron;
 
 use NeuronAI\Laravel\Facades\AIProvider;
-use NeuronAI\Laravel\Facades\VectorStore;use NeuronAI\Providers\AIProviderInterface;
-use NeuronAI\Providers\Anthropic\Anthropic;
+use NeuronAI\Laravel\Facades\EmbeddingProvider;
+use NeuronAI\Laravel\Facades\VectorStore;
+use NeuronAI\Providers\AIProviderInterface;
 use NeuronAI\RAG\Embeddings\EmbeddingsProviderInterface;
-use NeuronAI\RAG\Embeddings\OpenAIEmbeddingsProvider;
 use NeuronAI\RAG\RAG;
-use NeuronAI\RAG\VectorStore\FileVectorStore;
 use NeuronAI\RAG\VectorStore\VectorStoreInterface;
 
 class MyChatBot extends RAG
