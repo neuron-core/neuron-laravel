@@ -4,13 +4,11 @@
 > Get early access to new features, exclusive tutorials, and expert tips for building AI agents in PHP. Join a community of PHP developers pioneering the future of AI development.
 > [Subscribe to the newsletter](https://neuron-ai.dev)
 
-This package aims to make it easier for Laravel developers to get started with AI agent development using Neuron AI framework. 
-The package is built to help developers during the initial setup and configuration of their projects, 
-it's not meant to completely wrap the Neuron AI architecture. 
-Neuron doesn't need such invasive abstractions, it already has a very simple syntax, 100% typed code, and clear interfaces you can rely on to 
-develop your agentic system or create custom plugins and extensions. 
-
 > In this package we provide you with a development kit specifically designed for Laravel integration points without limiting the access to the Neuron native API. You can also use this package as an inspiration to design your own custom integration pattern.
+
+This package aims to make it easier for Laravel developers to get started with AI agent development using Neuron AI framework. 
+Neuron doesn't need invasive abstractions, it already has a very simple syntax, 100% typed code, and clear interfaces you can rely on to 
+develop your agentic system or create custom plugins and extensions. 
 
 You can find a ready-to-use configuration file, a few artisan commands to reduce boilerplate code, 
 a service class to get an instance of the AI provider with the classic Laravel configuration-driven approach.
