@@ -5,15 +5,6 @@ declare(strict_types=1);
 namespace NeuronAI\Laravel;
 
 use Illuminate\Support\Manager;
-use NeuronAI\Providers\AIProviderInterface;
-use NeuronAI\Providers\Anthropic\Anthropic;
-use NeuronAI\Providers\Deepseek\Deepseek;
-use NeuronAI\Providers\Gemini\Gemini;
-use NeuronAI\Providers\HuggingFace\HuggingFace;
-use NeuronAI\Providers\Mistral\Mistral;
-use NeuronAI\Providers\Ollama\Ollama;
-use NeuronAI\Providers\OpenAI\OpenAI;
-use NeuronAI\Providers\OpenAI\Responses\OpenAIResponses;
 use NeuronAI\RAG\Embeddings\EmbeddingsProviderInterface;
 use NeuronAI\RAG\Embeddings\GeminiEmbeddingsProvider;
 use NeuronAI\RAG\Embeddings\OllamaEmbeddingsProvider;
