@@ -5,18 +5,18 @@ declare(strict_types=1);
 namespace NeuronAI\Laravel\Facades;
 
 use Illuminate\Support\Facades\Facade;
-use NeuronAI\Providers\AIProviderInterface;
+use NeuronAI\RAG\VectorStore\VectorStoreInterface;
 
 /**
- * @mixin AIProviderInterface
+ * @mixin VectorStoreInterface
  */
-class AIProvider extends Facade
+class VectorStore extends Facade
 {
     /**
      * @inheritDoc
      */
     protected static function getFacadeAccessor(): string
     {
-        return \NeuronAI\Laravel\AIProviderManager::class;
+        return \NeuronAI\Laravel\VectorStoreManager::class;
     }
 }

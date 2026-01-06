@@ -68,6 +68,33 @@ php artisan neuron:agent MyAgent
 This will create a new agent class in your `app/Neuron/Agents` folder with the name `MyAgent.php` and a couple of 
 basic methods inside.
 
+<a name="commands"></a>
+
+### Available Artisan Commands
+
+The package ships with a few artisan commands to reduce boilerplate code and make the setup process easier for the most common
+Neuron AI components.
+
+```
+# Create an agent
+php artisan neuron:agent MyAgent
+
+# Create a RAG
+php artisan neuron:rag MyRAG
+
+# Create a tool
+php artisan neuron:tool MyTool
+
+# Create a workflow
+php artisan neuron:workflow MyWorkflow
+
+# Create a node
+php artisan neuron:node CustomNode
+
+# Create a middleware
+php artisan neuron:middleware CustomMiddleware
+```
+
 <a name="providers"></a>
 
 ## AI Providers
@@ -78,17 +105,17 @@ Learn more about supported providers in the Neuron AI documentation: **https://d
 To get an instance of the AI Provider you want to attach to your agent, you can use the `NeuronAI\Laravel\AIProvider` service class.
 
 ```php
-use NeuronAI\Laravel\AIProvider;
+use NeuronAI\Laravel\AIProviderManager;
 
 // Get the default provider
-$provider = AIProvider::driver();
+$provider = AIProviderManager::driver();
 
 // Get a specific provider instance
-$provider = AIProvider::driver('anthropic');
+$provider = AIProviderManager::driver('anthropic');
 ```
 
 The configuration file allows you to configure the default AI provider you want to use in your agents, and the 
-connection parameters (API key, model, etc.) for all the providers you want to use.
+connection parameters (API key, model, etc.).
 
 You can configure the appropriate API key in your environment file:
 
@@ -114,32 +141,19 @@ OLLAMA_MODEL=
 # And many others
 ```
 
-<a name="commands"></a>
+<a name="providers"></a>
 
-## Artisan Commands
+## RAG (embedding providers & vector stores)
 
-The package ships with a few artisan commands to reduce boilerplate code and make the setup process easier for the most common 
-Neuron AI components.
+If you want to implement a RAG kind of system, the configuration file also allows you to configure the embedding provider 
+and vector store you want to use in your RAG agents, and the connection parameters (API key, model, etc.).
+
+Here is an example of how to configure the embedding provider and vector store in the RAG component:
+
+```php
 
 ```
-# Create an agent
-php artisan neuron:agent MyAgent
 
-# Create a RAG
-php artisan neuron:rag MyRAG
-
-# Create a tool
-php artisan neuron:tool MyTool
-
-# Create a workflow
-php artisan neuron:workflow MyWorkflow
-
-# Create a node
-php artisan neuron:node CustomNode
-
-# Create a middleware
-php artisan neuron:middleware CustomMiddleware
-```
 
 <a name="migrations"></a>
 

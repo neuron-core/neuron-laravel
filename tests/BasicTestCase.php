@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace NeuronAI\Laravel\Tests;
 
 use Illuminate\Foundation\Application;
-use NeuronAI\Laravel\AIProvider;
+use NeuronAI\Laravel\AIProviderManager;
 use NeuronAI\Laravel\NeuronAIServiceProvider;
 use Orchestra\Testbench\TestCase;
 
@@ -29,7 +29,7 @@ class BasicTestCase extends TestCase
     protected function getPackageAliases(mixed $app): array
     {
         return [
-            'AIProvider' => AIProvider::class,
+            'AIProvider' => AIProviderManager::class,
         ];
     }
 }

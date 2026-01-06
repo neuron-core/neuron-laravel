@@ -18,7 +18,7 @@ use NeuronAI\Providers\OpenAI\Responses\OpenAIResponses;
 /**
  * @method static AIProviderInterface driver(string $driver = null)
  */
-class AIProvider extends Manager
+class AIProviderManager extends Manager
 {
     public function getDefaultDriver(): string
     {

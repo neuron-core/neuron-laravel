@@ -14,7 +14,7 @@ use NeuronAI\RAG\Embeddings\OpenAILikeEmbeddings;
 /**
  * @method static EmbeddingsProviderInterface driver(string $driver = null)
  */
-class EmbeddingProvider extends Manager
+class EmbeddingProviderManager extends Manager
 {
     public function getDefaultDriver(): string
     {

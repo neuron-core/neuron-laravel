@@ -33,7 +33,7 @@ class NeuronAIServiceProvider extends ServiceProvider
         // Default package configuration
         $this->mergeConfigFrom(__DIR__ . '/../config/neuron.php', 'neuron');
 
-        $this->app->singleton(AIProvider::class);
-        $this->app->singleton(EmbeddingProvider::class);
+        $this->app->singleton(AIProviderManager::class);
+        $this->app->singleton(EmbeddingProviderManager::class);
     }
 }

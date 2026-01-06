@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace NeuronAI\Laravel\Facades;
 
 use Illuminate\Support\Facades\Facade;
-use NeuronAI\Providers\AIProviderInterface;
 use NeuronAI\RAG\Embeddings\EmbeddingsProviderInterface;
 
 /**
@@ -18,6 +17,6 @@ class EmbeddingProvider extends Facade
      */
     protected static function getFacadeAccessor(): string
     {
-        return \NeuronAI\Laravel\EmbeddingProvider::class;
+        return \NeuronAI\Laravel\EmbeddingProviderManager::class;
     }
 }
