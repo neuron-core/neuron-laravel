@@ -155,7 +155,7 @@ OLLAMA_MODEL=
 
 <a name="providers"></a>
 
-## RAG (embedding providers & vector stores)
+## RAG (embeddings & vector stores)
 
 If you want to implement a RAG kind of system, the configuration file also allows you to configure the embedding provider 
 and vector store you want to use in your RAG agents, and the connection parameters (API key, model, etc.).
@@ -193,6 +193,8 @@ class MyChatBot extends RAG
 }
 ```
 
+You can go to the Neuron AI documentation to learn more about RAG and its available configuration options:
+https://docs.neuron-ai.dev/rag/rag
 
 <a name="migrations"></a>
 
