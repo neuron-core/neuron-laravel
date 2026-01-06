@@ -15,7 +15,7 @@ return [
     */
 
     'provider' => [
-        'default' => env('NEURON_PROVIDER'),
+        'default' => env('NEURON_AI_PROVIDER'),
 
         'anthropic' => [
             'key' => env('ANTHROPIC_KEY'),
@@ -71,6 +71,35 @@ return [
             'model' => env('COHERE_MODEL', 'command-a-reasoning-08-2025'),
             'parameters' => [],
         ],*/
+    ],
+
+    'embedding' => [
+        'default' => env('NEURON_EMBEDDING_PROVIDER'),
+
+        'openai' => [
+            'key' => env('OPENAI_KEY'),
+            'model' => env('OPENAI_EMBEDDING_MODEL', 'text-embedding-ada-002'),
+            'dimensions' => 1024,
+        ],
+
+        'gemini' => [
+            'key' => env('GEMINI_KEY'),
+            'model' => env('GEMINI_EMBEDDING_MODEL', 'gemini-pro-embed-v1'),
+            'config' => [],
+        ],
+
+        'ollama' => [
+            'url' => env('OLLAMA_URL', 'http://localhost:11434/api'),
+            'model' => env('OLLAMA_EMBEDDING_MODEL', 'openai-embedding-ada-002'),
+            'parameters' => [],
+        ],
+
+        'mistral' => [
+            'baseUri' => env('MISTRAL_BASE_URI', 'https://api.mistral.ai/v1/embeddings'),
+            'key' => env('MISTRAL_KEY'),
+            'model' => env('MISTRAL_EMBEDDING_MODEL', 'mistral-7b-embed-v1'),
+            'dimensions' => 1024,
+        ]
     ],
 
     /*

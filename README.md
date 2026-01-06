@@ -94,7 +94,7 @@ You can configure the appropriate API key in your environment file:
 
 ```dotenv
 # Support for: anthropic, gemini, openai, openai-responses, mistral, ollama, huggingface, deepseek
-NEURON_PROVIDER=anthropic
+NEURON_AI_PROVIDER=anthropic
 
 ANTHROPIC_KEY=
 ANTHROPIC_MODEL=
