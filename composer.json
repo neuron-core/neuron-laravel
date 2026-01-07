@@ -72,7 +72,9 @@
                 "NeuronAI\\Laravel\\NeuronAIServiceProvider"
             ],
             "aliases": {
-                "Neuron": "NeuronAI\\Laravel\\Facades\\Neuron"
+                "AIProvider": "NeuronAI\\Laravel\\Facades\\AIProvider",
+                "EmbeddingProvider": "NeuronAI\\Laravel\\Facades\\EmbeddingProvider",
+                "VectorStore": "NeuronAI\\Laravel\\Facades\\VectorStore"
             }
         }
     }
