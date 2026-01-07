@@ -29,7 +29,7 @@ class VectorStoreManager extends Manager
 
     public function createPineconeDriver(): VectorStoreInterface
     {
-        return new PineconeVectorStore(...$this->config['neuron.store.pinceone']);
+        return new PineconeVectorStore(...$this->config['neuron.store.pinecone']);
     }
 
     public function createQdrantDriver(): VectorStoreInterface

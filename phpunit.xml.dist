@@ -15,5 +15,8 @@
     </coverage>
     <php>
         <server name="INSPECTOR_INGESTION_KEY" value="xxx"/>
+        <server name="OPENAI_KEY" value="xxx"/>
+        <server name="PINECONE_KEY" value="xxx"/>
+        <server name="PINECONE_INDEX_URL" value="xxx"/>
     </php>
 </phpunit>

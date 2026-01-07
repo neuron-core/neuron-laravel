@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace NeuronAI\Laravel\Tests;
 
 use Illuminate\Foundation\Application;
-use NeuronAI\Laravel\AIProviderManager;
+use NeuronAI\Laravel\Facades\AIProvider;
+use NeuronAI\Laravel\Facades\EmbeddingProvider;
+use NeuronAI\Laravel\Facades\VectorStore;
 use NeuronAI\Laravel\NeuronAIServiceProvider;
 use Orchestra\Testbench\TestCase;
 
@@ -29,7 +31,9 @@ class BasicTestCase extends TestCase
     protected function getPackageAliases(mixed $app): array
     {
         return [
-            'AIProvider' => AIProviderManager::class,
+            'AIProvider' => AIProvider::class,
+            'EmbeddingProvider' => EmbeddingProvider::class,
+            'VectorStore' => VectorStore::class,
         ];
     }
 }

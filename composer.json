@@ -48,9 +48,8 @@
         }
     },
     "scripts": {
-        "test:unit": "phpunit --colors=always",
         "test": [
-            "@test:unit"
+            "phpunit --colors=always"
         ],
         "format": [
             "php-cs-fixer fix --allow-risky=yes",
