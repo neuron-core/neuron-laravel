@@ -24,26 +24,26 @@ class VectorStoreManager extends Manager
 
     public function createFileDriver(): VectorStoreInterface
     {
-        return new FileVectorStore(...$this->config['neuron.store.file']);
+        return new FileVectorStore(...config('neuron.store.file'));
     }
 
     public function createPineconeDriver(): VectorStoreInterface
     {
-        return new PineconeVectorStore(...$this->config['neuron.store.pinecone']);
+        return new PineconeVectorStore(...config('neuron.store.pinecone'));
     }
 
     public function createQdrantDriver(): VectorStoreInterface
     {
-        return new QdrantVectorStore(...$this->config['neuron.store.qdrant']);
+        return new QdrantVectorStore(...config('neuron.store.qdrant'));
     }
 
     public function createMeilisearchDriver(): VectorStoreInterface
     {
-        return new MeilisearchVectorStore(...$this->config['neuron.store.meilisearch']);
+        return new MeilisearchVectorStore(...config('neuron.store.meilisearch'));
     }
 
     public function createChromaDriver(): VectorStoreInterface
     {
-        return new ChromaVectorStore(...$this->config['neuron.store.chroma']);
+        return new ChromaVectorStore(...config('neuron.store.chroma'));
     }
 }

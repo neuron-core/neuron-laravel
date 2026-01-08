@@ -24,26 +24,26 @@ class EmbeddingProviderManager extends Manager
 
     public function createOpenaiDriver(): EmbeddingsProviderInterface
     {
-        return new OpenAIEmbeddingsProvider(...$this->config['neuron.embedding.openai']);
+        return new OpenAIEmbeddingsProvider(...config('neuron.embedding.openai'));
     }
 
     public function createGeminiDriver(): EmbeddingsProviderInterface
     {
-        return new GeminiEmbeddingsProvider(...$this->config['neuron.embedding.gemini']);
+        return new GeminiEmbeddingsProvider(...config('neuron.embedding.gemini'));
     }
 
     public function createOllamaDriver(): EmbeddingsProviderInterface
     {
-        return new OllamaEmbeddingsProvider(...$this->config['neuron.embedding.ollama']);
+        return new OllamaEmbeddingsProvider(...config('neuron.embedding.ollama'));
     }
 
     public function createVoyageDriver(): EmbeddingsProviderInterface
     {
-        return new VoyageEmbeddingsProvider(...$this->config['neuron.embedding.voyage']);
+        return new VoyageEmbeddingsProvider(...config('neuron.embedding.voyage'));
     }
 
     public function createMistralDriver(): EmbeddingsProviderInterface
     {
-        return new OpenAILikeEmbeddings(...$this->config['neuron.embedding.mistral']);
+        return new OpenAILikeEmbeddings(...config('neuron.embedding.mistral'));
     }
 }

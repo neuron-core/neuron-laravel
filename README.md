@@ -11,9 +11,8 @@ Neuron doesn't need invasive abstractions, it already has a very simple syntax, 
 develop your agentic system or create custom plugins and extensions. 
 
 You can find a ready-to-use configuration file, a few artisan commands to reduce boilerplate code, 
-a service class to get an instance of the AI provider with the classic Laravel configuration-driven approach.
-You can also find ready-to-run migration if you want to use the Eloquent Chat History component, 
-and other useful helpers.
+facades to automatically instantiate providers, and other utilities.
+You can also find ready-to-run migrations if you want to use the Eloquent Chat History component.
 
 ## What is Neuron?
 
