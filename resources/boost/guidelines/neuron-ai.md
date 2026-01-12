@@ -4,12 +4,9 @@ Neuron AI is a PHP Agentic framework for creating AI agents with features like c
 
 ### Core Components
 
-**Workflow as the Foundation**: The framework is built on a powerful event-driven workflow orchestration system:
-- `Workflow` (NeuronAI\Workflow\Workflow) - The foundational component providing event-driven node execution, persistence, streaming, human-in-the-loop interruptions, and middleware support
-- `Agent` (NeurnoAI\Agent) - Built on top of Workflow, provides chat, streaming, and structured output capabilities by composing specialized workflow nodes
-- `RAG` (NeurnoAI\RAG\RAG) - Extends Agent (thus also Workflow-based) with vector search and document retrieval capabilities
-
-**Key Architectural Insight**: Both Agent and RAG are specialized workflows. They inherit all workflow capabilities (interruption, persistence, checkpoints, middleware) while providing domain-specific functionality through custom nodes and events.
+- `Agent` (NeurnoAI\Agent) - Provides chat, streaming, and structured output capabilities
+- `RAG` (NeurnoAI\RAG\RAG) - Extends Agent with vector search and document retrieval capabilities
+- `Workflow` (NeuronAI\Workflow\Workflow) - Provides event-driven node execution, persistence, streaming, human-in-the-loop interruptions
 
 ## Available Artisan Commands
 
@@ -136,6 +133,51 @@ class MyAgent extends Agent
 - File: NeuronAI\Chat\History\FileChatHistory
 - SQL database: NeuronAI\Chat\History\SQLChatHistory
 - Eloquent ORM: NeuronAI\Chat\History\EloquentChatHistory
+
+### Eloquent Chat History
+
+This package provides an `EloquentChatHistory` implementation that can be used to persist chat history in a database using Eloquent models.
+
+First, you need to run the migration to create the necessary tables:
+
+```
+php artisan migrate --tag=neuron-migrations
+```
+
+You have to create a model that represents the table created, mapping a message in the database. Usually, it's `ChatMessage` model:
+
+```php
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+
+class ChatMessage extends Model
+{
+    protected $fillable = [
+        'thread_id', 'role', 'content', 'meta'
+    ];
+    
+    protected $casts = [
+        'content' => 'array', 
+        'meta' => 'array'
+    ];
+    
+    /**
+     * The conversation that owns the chat message.
+     *
+     * @return BelongsTo<Conversation, $this>
+     */
+    public function conversation(): BelongsTo
+    {
+        return $this->belongsTo(Conversation::class, 'thread_id');
+    }
+}
+```
+
+The most important architectural decision is about the field `thread_id`. It's used to link chat messages to another entity, 
+it could be directly related to a user, a company, or a project. If you want to allow an entity to have multiple conversations, you can use 
+an intermediate model like `Conversation` that will hold the `thread_id` field. So an entity can have multiple conversations, and a conversation can handle the messages. 
+You have to figure out how you want to design the system and what's the best approach for your use case.
 
 ## Structured Output
 
