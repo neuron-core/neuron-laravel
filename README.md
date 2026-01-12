@@ -10,9 +10,13 @@ This package aims to make it easier for Laravel developers to get started with A
 Neuron doesn't need invasive abstractions, it already has a very simple syntax, 100% typed code, and clear interfaces you can rely on to 
 develop your agentic system or create custom plugins and extensions. 
 
-You can find a ready-to-use configuration file, a few artisan commands to reduce boilerplate code, 
-facades to automatically instantiate providers, and other utilities.
-You can also find ready-to-run migrations if you want to use the Eloquent Chat History component.
+## What this package provides
+
+- A ready-to-use configuration file for AI providers, embeddings providers credentials
+- A few artisan commands to create the most used components and reduce boilerplate code
+- Facades to automatically instantiate providers and vector stores
+- Ready-to-run migrations if you want to use the EloquentChatHistory component
+- AI coding assistant guidelines integrated with Laravel Boost to help AI write better code
 
 ## What is Neuron?
 
