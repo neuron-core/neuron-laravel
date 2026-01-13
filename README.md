@@ -126,8 +126,6 @@ class YouTubeAgent extends Agent
 }
 ```
 
-You can see all the available providers in the documentation: **https://docs.neuron-ai.dev/the-basics/ai-provider**
-
 You can configure the appropriate API key in your environment file:
 
 ```dotenv
@@ -151,6 +149,8 @@ OLLAMA_MODEL=
 
 # And many others
 ```
+
+You can see all the available providers in the documentation: **https://docs.neuron-ai.dev/the-basics/ai-provider**
 
 <a name="providers"></a>
 
