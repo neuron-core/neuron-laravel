@@ -226,7 +226,7 @@ Read more about **Eloquent Chat History** in the [Neuron AI documentation](https
 
 ## Monitoring & Debugging
 
-Integrating AI Agents into your application you’re not working only with functions and deterministic code,
+Integrating AI Agents into your application, you’re not working only with functions and deterministic code,
 you program your agent also influencing probability distributions. Same input ≠ output.
 That means reproducibility, versioning, and debugging become real problems.
 
