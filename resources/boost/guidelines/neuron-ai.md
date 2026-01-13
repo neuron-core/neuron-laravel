@@ -4,9 +4,10 @@ Neuron AI is a PHP Agentic framework for creating AI agents with features like c
 
 ### Core Components
 
-- `Agent` (NeurnoAI\Agent) - Provides chat, streaming, and structured output capabilities
-- `RAG` (NeurnoAI\RAG\RAG) - Extends Agent with vector search and document retrieval capabilities
-- `Workflow` (NeuronAI\Workflow\Workflow) - Provides event-driven node execution, persistence, streaming, human-in-the-loop interruptions
+**Workflow as the Foundation**: The framework is built on a powerful event-driven workflow orchestration system:
+- `Workflow` (NeuronAI/Workflow/Workflow.php) - The foundational component providing event-driven node execution, persistence, streaming, human-in-the-loop interruptions, and middleware support
+- `Agent` (NeuronAI/Agent/Agent.php) - Built on top of Workflow, provides chat, streaming, and structured output capabilities by composing specialized workflow nodes
+- `RAG` (NeuronAI/RAG/RAG.php) - Extends Agent (thus also Workflow-based) with vector search and document retrieval capabilities
 
 ## Available Artisan Commands
 
@@ -18,9 +19,10 @@ php artisan neuron:rag <name>
 php artisan neuron:tool <name>
 php artisan neuron:workflow <name>
 php artisan neuron:node <name>
+php artisan neuron:middleware <name>
 ```
 
-## Agent - NeuronAI\Agent
+## Agent - NeuronAI\Agent\Agent
 
 Create an AI agent with:
 
@@ -33,8 +35,8 @@ Here is an example of an agent implementation:
 ```php
 namespace App\Neuron;
 
-use NeuronAI\Agent;
-use NeuronAI\SystemPrompt;
+use NeuronAI\Agent\Agent;
+use NeuronAI\Agent\SystemPrompt;
 use NeuronAI\Providers\AIProviderInterface;
 
 class MyAgent extends Agent
@@ -48,7 +50,7 @@ class MyAgent extends Agent
         );
     }
     
-    public function instructions(): string
+    protected function instructions(): string
     {
         return (string) new SystemPrompt(
             background: ["You are a friendly AI Agent created with Neuron framework."],
@@ -70,10 +72,10 @@ class MyAgent extends Agent
 use App\Neuron\MyAgent;
 use NeuronAI\Chat\Messages\UserMessage;
 
-/** @var \NeuronAI\Chat\Messages\AssistantMessage $response */
-$response = MyAgent::make()->chat(new UserMessage("Hello!"));
+/** @var \NeuronAI\Chat\Messages\AssistantMessage $message */
+$message = MyAgent::make()->chat(new UserMessage("Hello!"))->getMessage();
 
-echo $response->getContent();
+echo $message->getContent();
 ```
 
 ## AI Providers
@@ -91,6 +93,9 @@ Supported:
 - NeuronAI\Providers\XAI\Grok
 - NeuronAI\Providers\Deepseek\Deepseek
 - NeuronAI\Providers\AWS\BedrockRuntime
+- NeuronAI\Providers\Cohere\Cohere
+
+You are also free to use all these as standalone components in custom workflows.
 
 ## Chat History
 
@@ -133,6 +138,8 @@ class MyAgent extends Agent
 - File: NeuronAI\Chat\History\FileChatHistory
 - SQL database: NeuronAI\Chat\History\SQLChatHistory
 - Eloquent ORM: NeuronAI\Chat\History\EloquentChatHistory
+
+You are also free to use the chat history as a standalone component in custom workflows.
 
 ### Eloquent Chat History
 
@@ -325,7 +332,7 @@ use NeuronAI\RAG\RAG;
 use NeuronAI\RAG\VectorStore\FileVectorStore;
 use NeuronAI\RAG\VectorStore\VectorStoreInterface;
 
-class MyChatBot extends RAG
+class MyRAG extends RAG
 {
     // Other agent methods (provider, instructions, tools, chatHistory)...
     
@@ -366,6 +373,59 @@ class MyChatBot extends RAG
 - NeuronAI\RAG\Embeddings\OpeAILikeEmbeddingsProvider
 - NeuronAI\RAG\Embeddings\VoyageEmbeddingsProvider
 
+You are also free to use all these as standalone components in custom workflows.
+
+## Retrieval component
+
+Neuron provides a simple retrieval component that can be used to implement custom retrieval strategies from vector stores 
+or other resources. The RAG workflow uses this component in `NeuronAI\RAG\Nodes\RetrieveDocumentsNode`.
+
+The retrieval component is an implementation of the `NeuronAI\RAG\Retrieval\RetrievalInterface` interface. You can pass
+a custom implementation to the RAG workflow by overriding the `retrieval()` method.
+
+```php
+namespace App\Neuron;
+
+use NeuronAI\Providers\AIProviderInterface;
+use NeuronAI\Providers\Anthropic\Anthropic;
+use NeuronAI\RAG\Embeddings\EmbeddingsProviderInterface;
+use NeuronAI\RAG\Embeddings\OpenAIEmbeddingsProvider;
+use NeuronAI\RAG\RAG;
+use NeuronAI\RAG\Retrieval\RetrievalInterface;
+use NeuronAI\RAG\Retrieval\SimilarityRetrieval;
+use NeuronAI\RAG\VectorStore\FileVectorStore;
+use NeuronAI\RAG\VectorStore\VectorStoreInterface;
+
+class MyRAG extends RAG
+{
+    // Other agent methods (provider, instructions, tools, chatHistory)...
+    
+    protected function embeddings(): EmbeddingsProviderInterface
+    {
+        ...
+    }
+    
+    protected function vectorStore(): VectorStoreInterface
+    {
+        ...
+    }
+
+    /**
+     * Provide the default retrieval strategy.
+     */
+    protected function retrieval(): RetrievalInterface
+    {
+        return new SimilarityRetrieval(
+            $this->resolveVectorStore(),
+            $this->resolveEmbeddingsProvider()
+        );
+    }
+}
+```
+
+By default, RAG uses `SimilarityRetrieval` that simply queries the vector store to retrieve documents. You can eventually oveeride 
+the `retrieve()` method to implement custom retrieval strategies, or use the retrieval as standalone compnoent in custom workflows.
+
 ## Workflow - NeuronAI\Workflow\Workflow
 
 Neuron AI provides a powerful workflow orchestration system that allows you to build complex agentic workflow with a simple 
@@ -379,15 +439,20 @@ Event-Driven Architecture:
 This design promotes loose coupling and makes workflows highly composable and testable.
 
 Key methods:
-- `start(): NeuronAI\Workflow\WorkflowHandler` - Initialize or resume workflow
+- `init(?InterruptRequest $resumeRequest): WorkflowHandler` - Initialize or resume workflow
 - `addNode(NodeInterface $node): Workflow` - Register a node
 - `addNodes(array $nodes): Workflow` - Register multiple nodes
+- `middleware(string|array $nodeClass, WorkflowMiddleware|array $middleware)` - Register node-specific middleware
+- `globalMiddleware(WorkflowMiddleware|array $middleware)` - Register global middleware
 - `setPersistence(PersistenceInterface $persistence, string $workflowId)` - Configure persistence
-- `export(): string` - Export workflow structure to diagram format like Marmeid
+- `export(): string` - Export workflow structure to diagram format
 
 ### Node-Event Mapping
 
-Nodes are automatically mapped to events through reflection:
+Nodes are automatically mapped to events through reflection. The workflow introspects the node class structure 
+to build an event→node routing table. 
+
+Here is an example of a simple node:
 
 ```php
 class InitialNode extends Node
@@ -401,8 +466,6 @@ class InitialNode extends Node
 }
 ```
 
-The workflow introspects the node class structure to build an event→node routing table.
-
 ### Create and run a workflow
 
 1) Create nodes with:
@@ -412,7 +475,7 @@ php artisan neuron:node InitialNode
 php artisan neuron:node NodeTwo
 ```
 
-Nodes are simple classes, so you can eventually add constructor arguments if needed.
+Nodes are simple classes, so you can eventually add constructor arguments if they need external dependencies.
 
 2) Create a workflow with:
 
@@ -448,7 +511,85 @@ class MyWorkflow extends Workflow
 ```php
 use NeuronAI\Workflow\Workflow;
 
-$handler = Workflow::make()->start();
+$handler = Workflow::make()->init();
 
 $result = $handler->getResult();
+```
+
+## Workflow Middleware
+
+Middleware provides a way to hook the workflow execution and therefore also Agent and RAG, since they too are workflows.
+The core Workflow execution involves calling nodes based on the events returned by other nodes. 
+Middleware exposes hooks to step inside `before` and `after` the execution of nodes:
+
+```php
+namespace App\Neuron\Middleware;
+
+class CustomMiddleware implements WorkflowMiddleware
+{
+    /**
+     * Execute before the node.
+     */
+    public function before(NodeInterface $node, Event $event, WorkflowState $state): void
+    {
+        // ...
+    }
+    
+    /**
+     * Execute after the node.
+     */
+    public function after(NodeInterface $node, Event $event, Event|Generator $result, WorkflowState $state): void
+    {
+        // ...
+    }
+}
+```
+
+You can create middleware with the command below:
+
+```
+php artisan neuron:middleware <name>
+```
+
+### Registering Middleware
+If you would like to assign middleware to specific nodes, you may override the `middleware` method when defining the workflow:
+
+```php
+class MyWorkflow extends Workflow
+{
+    // Other methods...
+
+    /**
+     * Define the nodes middleware.
+     */
+    protected function middleware(): array
+    {
+        return [
+            NodeOne::class => [
+                new CustomMiddleware(),
+                new AnotherMiddleware(),
+            ]
+        ];
+    }
+}
+```
+
+### Global Middleware
+If you want middleware to run before and after every node, you may append it to the global middleware stack in the workflow:
+
+```php
+class MyWorkflow extends Workflow
+{
+    // Other methods...
+
+    /**
+     * Define the global middleware.
+     */
+    protected function globalMiddleware(): array
+    {
+        return [
+            new CustomMiddleware(),
+        ];
+    }
+}
 ```

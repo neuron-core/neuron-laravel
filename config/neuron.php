@@ -83,11 +83,41 @@ return [
             'parameters' => [],
         ],
 
-        /*'cohere' => [
+        'cohere' => [
             'key' => env('COHERE_KEY'),
             'model' => env('COHERE_MODEL', 'command-a-reasoning-08-2025'),
             'parameters' => [],
-        ],*/
+        ],
+
+        /*
+         * Audio providers
+         */
+        'openai-tts' => [
+            'key' => env('OPENAI_KEY'),
+            'model' => env('OPENAI_TTS_MODEL', 'gpt-5-mini'),
+            'voice' => env('OPENAI_VOICE', 'alloy'),
+            'parameters' => [],
+        ],
+
+        'openai-stt' => [
+            'key' => env('OPENAI_KEY'),
+            'model' => env('OPENAI_STT_MODEL', 'gpt-4o-transcribe'),
+            'language' => 'en',
+            'parameters' => [],
+        ],
+
+        'elevenlabs-tts' => [
+            'key' => env('ELEVENLABS_KEY'),
+            'model' => env('ELEVENLABS_TTS_MODEL', 'elevenlabs/tts-v1'),
+            'voiceId' => env('ELEVENLABS_VOICE_ID'),
+            'parameters' => [],
+        ],
+
+        'elevenlabs-stt' => [
+            'key' => env('ELEVENLABS_KEY'),
+            'model' => env('ELEVENLABS_STT_MODEL', 'elevenlabs/stt-v1'),
+            'parameters' => [],
+        ]
     ],
 
     /*

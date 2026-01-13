@@ -14,12 +14,18 @@
             "email": "valerio@inspector.dev"
         }
     ],
+    "repositories": [
+        {
+            "type": "vcs",
+            "url": "https://github.com/neuron-core/neuron-ai"
+        }
+    ],
     "require": {
         "php": "^8.2",
         "illuminate/console": "^10.0|^11.0|^12.0",
         "illuminate/contracts": "^10.0|^11.0|^12.0",
         "illuminate/support": "^10.0|^11.0|^12.0",
-        "neuron-core/neuron-ai": "^2.10"
+        "neuron-core/neuron-ai": "3.x-dev"
     },
     "require-dev": {
         "friendsofphp/php-cs-fixer": "^3.75",
