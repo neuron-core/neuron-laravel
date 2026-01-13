@@ -6,7 +6,6 @@ namespace NeuronAI\Laravel;
 
 use Illuminate\Support\ServiceProvider;
 use NeuronAI\Laravel\Commands\MakeAgent;
-use NeuronAI\Laravel\Commands\MakeMiddleware;
 use NeuronAI\Laravel\Commands\MakeNode;
 use NeuronAI\Laravel\Commands\MakeRAG;
 use NeuronAI\Laravel\Commands\MakeTool;
