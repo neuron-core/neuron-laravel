@@ -20,7 +20,7 @@ class MakeWorkflow extends GeneratorCommand
      */
     protected function getDefaultNamespace($rootNamespace): string
     {
-        return $rootNamespace.'\\Neuron\\Workflow';
+        return $rootNamespace.'\\Neuron\\Workflows';
     }
 
     protected function getStub(): string

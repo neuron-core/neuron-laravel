@@ -10,7 +10,7 @@ class MakeNode extends GeneratorCommand
 {
     protected $name = 'neuron:node';
 
-    protected $description = 'Create a new Node class.';
+    protected $description = 'Create a new Workflow Node class.';
 
     protected $type = 'Neuron Node';
 
@@ -20,7 +20,7 @@ class MakeNode extends GeneratorCommand
      */
     protected function getDefaultNamespace($rootNamespace): string
     {
-        return $rootNamespace.'\\Neuron\\Workflow';
+        return $rootNamespace.'\\Neuron\\Nodes';
     }
 
     protected function getStub(): string
