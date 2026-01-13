@@ -20,11 +20,11 @@ class MakeNode extends GeneratorCommand
      */
     protected function getDefaultNamespace($rootNamespace): string
     {
-        return $rootNamespace.'\\Neuron\\Workflow';
+        return $rootNamespace . '\\Neuron\\Node';
     }
 
     protected function getStub(): string
     {
-        return __DIR__.'/stubs/node.stub';
+        return __DIR__ . '/stubs/node.stub';
     }
 }
