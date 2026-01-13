@@ -1,6 +1,6 @@
 {
     "name": "neuron-core/neuron-laravel",
-    "description": "Utility Package for using Neuron AI in Laravel applications.",
+    "description": "Official Neuron AI Laravel SDK.",
     "keywords": [
         "ai",
         "ai-agent",
