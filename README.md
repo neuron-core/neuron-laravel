@@ -220,4 +220,34 @@ And then run the migrations:
 php artisan migrate --path=/database/migrations/neuron
 ```
 
-Read more about **Eloquent Chat History** in the Neuron AI documentation: **https://docs.neuron-ai.dev/the-basics/chat-history-and-memory#eloquentchathisotry**
+Read more about **Eloquent Chat History** in the [Neuron AI documentation](https://docs.neuron-ai.dev/the-basics/chat-history-and-memory#eloquentchathisotry).
+
+<a name="monitoring">
+
+## Monitoring & Debugging
+
+Integrating AI Agents into your application you’re not working only with functions and deterministic code,
+you program your agent also influencing probability distributions. Same input ≠ output.
+That means reproducibility, versioning, and debugging become real problems.
+
+Many of the Agents you build with Neuron will contain multiple steps with multiple invocations of LLM calls,
+tool usage, access to external memories, etc. As these applications get more and more complex, it becomes crucial
+to be able to inspect what exactly your agent is doing and why.
+
+Why is the model taking certain decisions? What data is the model reacting to? Prompting is not programming
+in the common sense. No static types, small changes break output, long prompts cost latency,
+and no two models behave exactly the same with the same prompt.
+
+The best way to take your AI application under control is with [Inspector](https://inspector.dev). After you sign up,
+make sure to set the `INSPECTOR_INGESTION_KEY` variable in the application environment file to start monitoring:
+
+```dotenv
+INSPECTOR_INGESTION_KEY=fwe45gtxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+```
+
+After configuring the environment variable, you will see the agent execution timeline in your Inspector dashboard.
+
+[![](./assets/inspector.png)](https://inspector.dev)
+
+
+Learn more about Monitoring in the [documentation](https://docs.neuron-ai.dev/advanced/observability).
