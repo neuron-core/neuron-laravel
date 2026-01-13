@@ -20,11 +20,11 @@ class MakeRAG extends GeneratorCommand
      */
     protected function getDefaultNamespace($rootNamespace): string
     {
-        return $rootNamespace.'\\Neuron\\Agents';
+        return $rootNamespace . '\\Neuron\\RAG';
     }
 
     protected function getStub(): string
     {
-        return __DIR__.'/stubs/rag.stub';
+        return __DIR__ . '/stubs/rag.stub';
     }
 }
