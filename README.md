@@ -92,9 +92,6 @@ php artisan neuron:workflow MyWorkflow
 
 # Create a node
 php artisan neuron:node CustomNode
-
-# Create a middleware
-php artisan neuron:middleware CustomMiddleware
 ```
 
 <a name="providers"></a>
