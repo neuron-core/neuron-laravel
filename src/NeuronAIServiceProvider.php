@@ -27,7 +27,6 @@ class NeuronAIServiceProvider extends ServiceProvider
 
         $this->commands([
             MakeAgent::class,
-            MakeMiddleware::class,
             MakeNode::class,
             MakeRAG::class,
             MakeTool::class,
