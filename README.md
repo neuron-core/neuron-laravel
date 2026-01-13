@@ -239,7 +239,7 @@ in the common sense. No static types, small changes break output, long prompts c
 and no two models behave exactly the same with the same prompt.
 
 The best way to take your AI application under control is with [Inspector](https://inspector.dev). After you sign up,
-make sure to set the `INSPECTOR_INGESTION_KEY` variable in the application environment file to start monitoring:
+make sure to set the `INSPECTOR_INGESTION_KEY` variable in the application environment file to start monitoring your agents:
 
 ```dotenv
 INSPECTOR_INGESTION_KEY=fwe45gtxxxxxxxxxxxxxxxxxxxxxxxxxxxx
