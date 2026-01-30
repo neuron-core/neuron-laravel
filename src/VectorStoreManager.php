@@ -19,7 +19,7 @@ class VectorStoreManager extends Manager
 {
     public function getDefaultDriver(): string
     {
-        return config('neuron.embedding.default');
+        return config('neuron.store.default');
     }
 
     public function createFileDriver(): VectorStoreInterface
