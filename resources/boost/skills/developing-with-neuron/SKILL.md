@@ -1,4 +1,9 @@
-## Neuron AI
+---
+name: developing-with-neuron
+description: Guide for developing with Neuron AI - PHP agentic framework for creating AI Agent, RAG, and agentic Workflow. Activate or use when working with Neuron AI features including text generation, structured output, embeddings, image generation, audio processing, streaming, tools/function calling, or any LLM provider integration (OpenAI, Anthropic, Gemini, Mistral, Groq, DeepSeek, OpenRouter, Ollama, VoyageAI, ElevenLabs, Huggingface, Cohere). Activate for any Neuron-related development tasks.
+---
+
+## Developing with Neuron AI
 
 Neuron AI is a PHP Agentic framework for creating AI agents with features like chat history, tool integration, RAG (Retrieval Augmented Generation), structured output, and workflow orchestration. The codebase follows PSR-12 standards with strict typing and modern PHP 8.1+ features.
 
@@ -8,18 +13,6 @@ Neuron AI is a PHP Agentic framework for creating AI agents with features like c
 - `RAG` (NeurnoAI\RAG\RAG) - Extends Agent with vector search and document retrieval capabilities
 - `Workflow` (NeuronAI\Workflow\Workflow) - Provides event-driven node execution, persistence, streaming, human-in-the-loop interruptions
 
-## Available Artisan Commands
-
-You can use the following artisan commands to generate boilerplate code for AI agents, RAG, and workflows:
-
-```
-php artisan neuron:agent <name>
-php artisan neuron:rag <name>
-php artisan neuron:tool <name>
-php artisan neuron:workflow <name>
-php artisan neuron:node <name>
-```
-
 ## Agent - NeuronAI\Agent
 
 Create an AI agent with:
@@ -28,7 +21,7 @@ Create an AI agent with:
 php artisan neuron:agent MyAgent
 ```
 
-Here is an example of an agent implementation:
+Here is a code example:
 
 ```php
 namespace App\Neuron;
