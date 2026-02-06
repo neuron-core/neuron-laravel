@@ -237,7 +237,7 @@ class Person
 
 **Available Validation Rules**:
 #[NotBlank]
-#[Lenght(min: 1, max: 10)]
+#[Length(min: 1, max: 10)]
 #[WordsCount(min: 1, max: 10)]
 #[Count(min: 1, max: 3)]
 #[EqualTo(reference: 'Rome')] 
