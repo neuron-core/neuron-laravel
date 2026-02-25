@@ -205,7 +205,7 @@ Neuron provides you with a built-in system to manage the memory of a chat sessio
 In many Q&A applications you can have a back-and-forth conversation with the LLM, meaning the application needs some sort 
 of "memory" of past questions and answers, and some logic for incorporating those into its current thinking.
 
-Here is the documentation: **https://docs.neuron-ai.dev/the-basics/chat-history-and-memory**
+Here is the documentation: **https://docs.neuron-ai.dev/agent/chat-history-and-memory**
 
 The package ships with a ready-to-use migration for the `ElquentChatHistory` component. Here is the command to copy the migration
 in your project `database/migrations/neuron` folder:
@@ -220,7 +220,49 @@ And then run the migrations:
 php artisan migrate --path=/database/migrations/neuron
 ```
 
-Read more about **Eloquent Chat History** in the [Neuron AI documentation](https://docs.neuron-ai.dev/the-basics/chat-history-and-memory#eloquentchathisotry).
+This package also provides the ChatMessage model you can use to store the messages in the database.
+
+```php
+namespace App\Neuron;
+
+use NeuronAI\Agent\Agent;
+use NeuronAI\Chat\History\ChatHistoryInterface;
+use NeuronAI\Chat\History\EloquentChatHistory;
+use NeuronAI\Laravel\Models\ChatMessage;
+
+class MyAgent extends Agent
+{
+    ...
+    
+    protected function chatHistory(): ChatHistoryInterface
+    {
+        return new EloquentChatHistory(
+            thread_id: 'THREAD_ID',
+            modelClass: ChatMessage::class,
+            contextWindow: 100000
+        );
+    }
+}
+```
+
+Read more about **Eloquent Chat History** in the [Neuron AI documentation](https://docs.neuron-ai.dev/agent/chat-history-and-memory#eloquentchathisotry).
+
+## Eloquent workflow persistence
+
+Neuron provides you with a built-in system to persist the state of a workflow. This package contains the `WorkflowInterrupt` eloquent model 
+you can use to instrument the workflow:
+
+```php
+use NeuronAI\Laravel\Models\WorkflowInterrupt;
+use NeuronAI\Workflow\Persistence\EloquentPersistence;
+
+// Creating a workflow
+$workflow = WorkflowAgent(
+    persistence: new EloquentPersistence(WorkflowInterrupt::class)
+);
+```
+
+Learn more on the [Neuron AI documentation](https://docs.neuron-ai.dev/workflow/persistence#eloquent).
 
 <a name="monitoring">
 
