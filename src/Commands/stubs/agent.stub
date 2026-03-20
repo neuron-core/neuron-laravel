@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace {{namespace}};
 
 use NeuronAI\Agent\Agent;
-use NeuronAI\Laravel\AIProvider;
+use NeuronAI\Laravel\Facades\AIProvider;
 use NeuronAI\Providers\AIProviderInterface;
-use NeuronAI\SystemPrompt;
+use NeuronAI\Agent\SystemPrompt;
 use NeuronAI\Tools\ToolInterface;
 use NeuronAI\Tools\Toolkits\ToolkitInterface;
 
