@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace {{namespace}};
 
-use NeuronAI\Agent;
+use NeuronAI\Agent\Agent;
 use NeuronAI\Laravel\AIProvider;
 use NeuronAI\Providers\AIProviderInterface;
 use NeuronAI\SystemPrompt;
