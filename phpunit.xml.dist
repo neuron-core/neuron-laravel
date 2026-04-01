@@ -8,11 +8,11 @@
             <directory>tests</directory>
         </testsuite>
     </testsuites>
-    <coverage>
+    <source>
         <include>
             <directory suffix=".php">src</directory>
         </include>
-    </coverage>
+    </source>
     <php>
         <server name="INSPECTOR_INGESTION_KEY" value="xxx"/>
         <server name="OPENAI_KEY" value="xxx"/>
