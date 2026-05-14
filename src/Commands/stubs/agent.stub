@@ -22,7 +22,9 @@ class {{class}} extends Agent
     public function instructions(): string
     {
         return (string) new SystemPrompt(
-            background: [...config('neuron.system_prompt')]
+            background: config('neuron.system_prompt')['background'],
+            steps: config('neuron.system_prompt')['steps'],
+            output: config('neuron.system_prompt')['output'],
         );
     }
 

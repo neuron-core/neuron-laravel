@@ -15,7 +15,7 @@ return [
     */
 
     'system_prompt' => [
-        'background' => 'You are a helpful AI assistant built with Neuron AI framework.',
+        'background' => ['You are a helpful AI assistant built with Neuron AI framework.'],
         'steps' => [],
         'output' => [],
     ],
