@@ -90,7 +90,18 @@ foreach (Neuron::stream(new UserMessage('Hello'))->events() as $event) {
 $person = Neuron::structured(new UserMessage('I am John and I like pizza!'), Person::class);
 ```
 
-When you need tools, custom memory, or more advanced agent behaviour, create a dedicated agent class using `php artisan neuron:agent`.
+You can also attach tools or toolkits before making a call. Pass a single instance or an array and chain directly into the interaction method:
+
+```php
+use NeuronAI\Laravel\Facades\Neuron;
+use NeuronAI\Chat\Messages\UserMessage;
+
+$response = Neuron::tools(new MyTool())->chat(new UserMessage('Hello!'));
+
+$response = Neuron::tools([new SearchTool(), CalculatorToolkit::make()])->chat(new UserMessage('Hello!'));
+```
+
+When you need custom memory or more advanced agent behaviour, create a dedicated agent class using `php artisan neuron:agent`.
 
 <a name="agent"></a>
 
