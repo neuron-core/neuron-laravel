@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace NeuronAI\Laravel;
 
 use Illuminate\Support\ServiceProvider;
+use NeuronAI\Agent\SystemPrompt;
 use NeuronAI\Laravel\Commands\MakeAgent;
 use NeuronAI\Laravel\Commands\MakeMiddleware;
 use NeuronAI\Laravel\Commands\MakeNode;
@@ -45,5 +46,19 @@ class NeuronAIServiceProvider extends ServiceProvider
 
         $this->app->singleton(AIProviderManager::class);
         $this->app->singleton(EmbeddingProviderManager::class);
+
+        $this->app->singleton(Neuron::class, function ($app) {
+            $sp = config('neuron.system_prompt', []);
+            $instructions = (string) new SystemPrompt(
+                background: $sp['background'] ?? [],
+                steps: $sp['steps'] ?? [],
+                output: $sp['output'] ?? [],
+            );
+
+            return new Neuron(
+                provider: $app->make(AIProviderManager::class)->driver(),
+                instructions: $instructions ?: null,
+            );
+        });
     }
 }
