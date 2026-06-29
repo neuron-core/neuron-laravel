@@ -57,6 +57,41 @@ in your project `config/neuron.php` folder:
 php artisan vendor:publish --tag=neuron-config
 ```
 
+<a name="neuron-facade"></a>
+
+## Neuron Facade
+
+The package includes a `Neuron` facade that gives you an immediate entry point to the agent without creating a dedicated class. It reads the default provider and system prompt from the package configuration and exposes the three core interaction modes.
+
+Set your default provider in the environment file:
+
+```dotenv
+NEURON_AI_PROVIDER=anthropic
+ANTHROPIC_KEY=your-key-here
+ANTHROPIC_MODEL=claude-3-7-sonnet-latest
+```
+
+Then use the facade directly in your controllers or services:
+
+```php
+use NeuronAI\Laravel\Facades\Neuron;
+use NeuronAI\Chat\Messages\UserMessage;
+
+// Chat (synchronous)
+$response = Neuron::chat(new UserMessage('Hello!'))->getMessage();
+echo $response->getContent();
+
+// Stream (real-time chunks)
+foreach (Neuron::stream(new UserMessage('Hello'))->events() as $event) {
+    echo $event->content;
+}
+
+// Structured output
+$person = Neuron::structured(new UserMessage('I am John and I like pizza!'), Person::class);
+```
+
+When you need tools, custom memory, or more advanced agent behaviour, create a dedicated agent class using `php artisan neuron:agent`.
+
 <a name="agent"></a>
 
 ## Create an Agent
