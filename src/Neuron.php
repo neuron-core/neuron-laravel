@@ -6,13 +6,28 @@ namespace NeuronAI\Laravel;
 
 use NeuronAI\Agent\Agent;
 use NeuronAI\Providers\AIProviderInterface;
+use NeuronAI\Tools\ToolInterface;
+use NeuronAI\Tools\Toolkits\ToolkitInterface;
 
 class Neuron
 {
+    /** @var array<ToolInterface|ToolkitInterface> */
+    protected array $tools = [];
+
     public function __construct(
         protected AIProviderInterface $provider,
         protected ?string $instructions = null,
     ) {}
+
+    /**
+     * @param ToolInterface|ToolkitInterface|array<ToolInterface|ToolkitInterface> $tools
+     */
+    public function tools(ToolInterface|ToolkitInterface|array $tools): static
+    {
+        $clone = clone $this;
+        $clone->tools = is_array($tools) ? $tools : [$tools];
+        return $clone;
+    }
 
     private function makeAgent(): Agent
     {
@@ -20,6 +35,9 @@ class Neuron
         $agent->setAiProvider($this->provider);
         if ($this->instructions !== null) {
             $agent->setInstructions($this->instructions);
+        }
+        if ($this->tools !== []) {
+            $agent->setTools($this->tools);
         }
         return $agent;
     }
