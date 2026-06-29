@@ -90,18 +90,71 @@ foreach (Neuron::stream(new UserMessage('Hello'))->events() as $event) {
 $person = Neuron::structured(new UserMessage('I am John and I like pizza!'), Person::class);
 ```
 
-You can also attach tools or toolkits before making a call. Pass a single instance or an array and chain directly into the interaction method:
+### Customizing a call
+
+The facade resolves a **singleton**, so configuration methods never mutate the
+shared instance — they return a fresh, independent copy you chain into the call.
+This means every `Neuron::chat(...)` starts from the clean, configured default
+unless you explicitly attach tools or middleware.
+
+Attach **tools** or toolkits before a call. Pass a single instance or an array:
 
 ```php
 use NeuronAI\Laravel\Facades\Neuron;
 use NeuronAI\Chat\Messages\UserMessage;
 
-$response = Neuron::tools(new MyTool())->chat(new UserMessage('Hello!'));
+$response = Neuron::tools(new SearchTool())
+    ->chat(new UserMessage('Hello!'))
+    ->getMessage();
 
-$response = Neuron::tools([new SearchTool(), CalculatorToolkit::make()])->chat(new UserMessage('Hello!'));
+$response = Neuron::tools([new SearchTool(), CalculatorToolkit::make()])
+    ->chat(new UserMessage('Hello!'))
+    ->getMessage();
 ```
 
-When you need custom memory or more advanced agent behaviour, create a dedicated agent class using `php artisan neuron:agent`.
+Attach **middleware** to specific agent nodes. The first argument is the node
+class (or an array of node classes) the middleware should run on; the second is
+a middleware instance (or an array of instances). Each `Neuron` interaction mode
+is backed by its own node — `ChatNode` for `chat()`, `StreamingNode` for
+`stream()`, `StructuredOutputNode` for `structured()`, and `ToolNode` for tool
+execution — so target the node the middleware is meant to observe:
+
+```php
+use NeuronAI\Laravel\Facades\Neuron;
+use NeuronAI\Agent\Middleware\ToolApproval;
+use NeuronAI\Agent\Nodes\ChatNode;
+use NeuronAI\Agent\Nodes\ToolNode;
+use NeuronAI\Chat\Messages\UserMessage;
+
+// Require human approval before the agent executes any tool
+$response = Neuron::middleware(ToolNode::class, new ToolApproval())
+    ->chat(new UserMessage('Delete the oldest log file'))
+    ->getMessage();
+
+// Both arguments accept arrays: attach multiple middleware to multiple nodes
+$neuron = Neuron::middleware([ChatNode::class, ToolNode::class], [new ToolApproval()]);
+
+$response = $neuron->chat(new UserMessage('Delete the oldest log file'))->getMessage();
+```
+
+You can chain multiple calls together, and the original facade instance is never
+affected:
+
+```php
+use NeuronAI\Agent\Middleware\ToolApproval;
+use NeuronAI\Agent\Nodes\ToolNode;
+
+$response = Neuron::tools(new SearchTool())
+    ->middleware(ToolNode::class, new ToolApproval())
+    ->chat(new UserMessage('Hello!'))
+    ->getMessage();
+
+// The singleton is untouched — this call has no tools or middleware
+Neuron::chat(new UserMessage('Hello!'));
+```
+
+For custom memory, multiple middleware, or more advanced agent behaviour, create
+a dedicated agent class using `php artisan neuron:agent`.
 
 <a name="agent"></a>
 
