@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace NeuronAI\Laravel;
 
 use NeuronAI\Agent\Agent;
+use NeuronAI\Agent\AgentHandler;
+use NeuronAI\Exceptions\AgentException;
 use NeuronAI\Providers\AIProviderInterface;
 use NeuronAI\Tools\ToolInterface;
 use NeuronAI\Tools\Toolkits\ToolkitInterface;
@@ -42,16 +44,20 @@ class Neuron
         return $agent;
     }
 
-    public function chat(mixed $message): mixed
+    public function chat(mixed $message): AgentHandler
     {
         return $this->makeAgent()->chat($message);
     }
 
-    public function stream(mixed $message): mixed
+    public function stream(mixed $message): AgentHandler
     {
         return $this->makeAgent()->stream($message);
     }
 
+    /**
+     * @throws \Throwable
+     * @throws AgentException
+     */
     public function structured(mixed $message, string $outputClass): mixed
     {
         return $this->makeAgent()->structured($message, $outputClass);
