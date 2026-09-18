@@ -336,8 +336,8 @@ class MyAgent extends Agent
     protected function chatHistory(): ChatHistoryInterface
     {
         return new EloquentChatHistory(
-            thread_id: 'THREAD_ID',
-            modelClass: ChatMessage::class,
+            ChatMessage::class,
+            threadId: 'THREAD_ID',
             contextWindow: 100000
         );
     }
@@ -346,38 +346,13 @@ class MyAgent extends Agent
 
 Read more about **Eloquent Chat History** in the [Neuron AI documentation](https://docs.neuron-ai.dev/agent/chat-history-and-memory#eloquentchathisotry).
 
-## Eloquent workflow persistence
-
-Neuron provides you with a built-in system to persist the state of a workflow. This package contains the `WorkflowInterrupt` eloquent model 
-you can use to instrument the workflow:
-
-```php
-use NeuronAI\Laravel\Models\WorkflowInterrupt;
-use NeuronAI\Workflow\Persistence\EloquentPersistence;
-
-// Creating a workflow
-$workflow = WorkflowAgent(
-    persistence: new EloquentPersistence(WorkflowInterrupt::class)
-);
-```
-
-Learn more on the [Neuron AI documentation](https://docs.neuron-ai.dev/workflow/persistence#eloquent).
-
 <a name="monitoring">
 
 ## Monitoring & Debugging
 
-Integrating AI Agents into your application, you’re not working only with functions and deterministic code,
-you program your agent also influencing probability distributions. Same input ≠ output.
-That means reproducibility, versioning, and debugging become real problems.
-
 Many of the Agents you build with Neuron will contain multiple steps with multiple invocations of LLM calls,
 tool usage, access to external memories, etc. As these applications get more and more complex, it becomes crucial
 to be able to inspect what exactly your agent is doing and why.
-
-Why is the model taking certain decisions? What data is the model reacting to? Prompting is not programming
-in the common sense. No static types, small changes break output, long prompts cost latency,
-and no two models behave exactly the same with the same prompt.
 
 The best way to take your AI application under control is with [Inspector](https://inspector.dev). After you sign up,
 make sure to set the `INSPECTOR_INGESTION_KEY` variable in the application environment file to start monitoring your agents:

@@ -214,7 +214,7 @@ return [
         ],
 
         'chroma' => [
-            'collectionUrl' => env('CHROMA_COLLECTION'),
+            'collection' => env('CHROMA_COLLECTION'),
             'host' => env('CHROMA_HOST', 'http://localhost:7700'),
             'tenant' => env('CHROMA_TENANT', 'default_tenant'),
             'database' => env('CHROMA_DATABASE', 'default_database'),

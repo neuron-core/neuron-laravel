@@ -16,7 +16,6 @@ class MakeAgent extends GeneratorCommand
 
     /**
      * @param string $rootNamespace
-     * @phpstan-ignore-next-line
      */
     protected function getDefaultNamespace($rootNamespace): string
     {

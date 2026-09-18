@@ -12,11 +12,8 @@ return new class () extends Migration {
      */
     public function up(): void
     {
-        Schema::create('workflow_interrupts', function (Blueprint $table) {
-            $table->id();
-            $table->string('workflow_id')->unique();
-            $table->longText('interrupt')->charset('binary');
-            $table->timestamps();
+        Schema::table('chat_messages', function (Blueprint $table) {
+            $table->timestamp('archived_at')->nullable()->after('meta');
         });
     }
 
@@ -25,6 +22,8 @@ return new class () extends Migration {
      */
     public function down(): void
     {
-        Schema::dropIfExists('workflow_interrupts');
+        Schema::table('chat_messages', function (Blueprint $table) {
+            $table->dropColumn('archived_at');
+        });
     }
 };

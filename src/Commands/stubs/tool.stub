@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace {{namespace}}; 
+namespace {{namespace}};
 
 use NeuronAI\Tools\PropertyType;
 use NeuronAI\Tools\Tool;
@@ -10,14 +10,9 @@ use NeuronAI\Tools\ToolProperty;
 
 class {{class}} extends Tool
 {
-    public function __construct()
-    {
-        // Define Tool name and description
-        parent::__construct(
-            '{{class}}',
-            'describe the purpose of the tool',
-        );
-    }
+    protected string $name = '{{class}}';
+
+    protected ?string $description = 'describe the purpose of the tool';
 
     /**
      * Properties are the input arguments of the __invoke method.

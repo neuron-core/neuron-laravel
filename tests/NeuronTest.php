@@ -34,6 +34,22 @@ class MarkerMiddleware implements WorkflowMiddleware
     }
 }
 
+/**
+ * Minimal concrete tool used only to assert wiring.
+ */
+class InlineTool extends Tool
+{
+    public function __construct(string $name)
+    {
+        $this->name = $name;
+    }
+
+    public function __invoke(): string
+    {
+        return '';
+    }
+}
+
 class NeuronTest extends BasicTestCase
 {
     private function neuron(): Neuron
@@ -80,7 +96,7 @@ class NeuronTest extends BasicTestCase
     public function test_tools_returns_a_clone_and_leaves_the_original_untouched(): void
     {
         $neuron = $this->neuron();
-        $tool = new Tool('search');
+        $tool = new InlineTool('search');
 
         $withTools = $neuron->tools($tool);
 
@@ -122,7 +138,7 @@ class NeuronTest extends BasicTestCase
 
     public function test_tools_are_injected_into_the_agent(): void
     {
-        $neuron = $this->neuron()->tools([new Tool('search'), new Tool('save')]);
+        $neuron = $this->neuron()->tools([new InlineTool('search'), new InlineTool('save')]);
 
         $this->assertSame(
             ['search', 'save'],

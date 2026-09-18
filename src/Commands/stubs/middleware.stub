@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace {{namespace}};
 
-use Generator;
 use NeuronAI\Workflow\Events\Event;
 use NeuronAI\Workflow\Middleware\WorkflowMiddleware;
 use NeuronAI\Workflow\NodeInterface;
@@ -37,11 +36,10 @@ class {{class}} implements WorkflowMiddleware
      * the generator is fully consumed.
      *
      * @param NodeInterface $node The node that executed
-     * @param Event $event The event that was processed
-     * @param Event|Generator $result The result returned by the node
+     * @param Event $result The final result event returned by the node
      * @param WorkflowState $state The current workflow state
      */
-    public function after(NodeInterface $node, Event $event, Event|Generator $result, WorkflowState $state): void
+    public function after(NodeInterface $node, Event $result, WorkflowState $state): void
     {
         // Implement after-node logic here
     }

@@ -1,9 +1,9 @@
 ---
-name: neuron-tool-creator
-description: Create custom tools, toolkits, and MCP integrations for Neuron AI agents. Use this skill when the user mentions creating tools, building toolkits, extending Tool class, defining tool properties, implementing tool execution, MCP server integration, Model Context Protocol, connecting external tools, or tool guidelines. Also trigger for any task involving ToolProperty, ArrayProperty, ObjectProperty, AbstractToolkit, McpConnector, or StdioTransport/SseHttpTransport/StreamableHttpTransport.
+name: neuron-tool
+description: Create custom tools, toolkits, and MCP integrations for Neuron AI agents. Use this skill when the user mentions creating tools, building toolkits, extending Tool class, defining tool properties, implementing tool execution, MCP server integration, Model Context Protocol, connecting external tools, multimodal tool results, or tool guidelines. Also trigger for any task involving ToolOutput, ToolProperty, ArrayProperty, ObjectProperty, AbstractToolkit, McpConnector, or StdioTransport/SseHttpTransport/StreamableHttpTransport.
 ---
 
-# Neuron AI Tool Creator
+# Neuron AI Tool
 
 This skill helps you create custom tools, toolkits, and MCP integrations for Neuron AI agents.
 
@@ -18,7 +18,7 @@ Every tool has:
 - **Name**: Unique identifier
 - **Description**: Explains what the tool does (critical for LLM)
 - **Properties**: Input parameters with types and descriptions
-- **Callable**: The actual logic to run
+- **`__invoke()`**: The actual logic to run — returns a `ToolOutput` (default), or a plain string/array
 
 ## Creating Custom Tools
 
@@ -28,18 +28,15 @@ The cleanest approach for complex tools:
 
 ```php
 use NeuronAI\Tools\Tool;
+use NeuronAI\Tools\ToolOutput;
 use NeuronAI\Tools\ToolProperty;
 use NeuronAI\Tools\PropertyType;
 
 class WeatherTool extends Tool
 {
-    public function __construct()
-    {
-        parent::__construct(
-            name: 'get_weather',
-            description: 'Get the current weather for a location. Returns temperature, conditions, and humidity.'
-        );
-    }
+    protected string $name = 'get_weather';
+
+    protected ?string $description = 'Get the current weather for a location. Returns temperature, conditions, and humidity.';
 
     protected function properties(): array
     {
@@ -60,12 +57,12 @@ class WeatherTool extends Tool
         ];
     }
 
-    public function __invoke(string $location, ?string $units = 'celsius'): string
+    public function __invoke(string $location, ?string $units = 'celsius'): ToolOutput
     {
         // Your API call or logic here
         $weatherData = $this->fetchWeather($location, $units);
 
-        return json_encode($weatherData);
+        return ToolOutput::text(json_encode($weatherData));
     }
 
     private function fetchWeather(string $location, string $units): array
@@ -81,48 +78,25 @@ class WeatherTool extends Tool
 }
 ```
 
-### Method 2: Fluent Builder with `setCallable`
+### Method 2: Class with Dependencies
 
-For simpler tools or closures:
-
-```php
-use NeuronAI\Tools\Tool;
-use NeuronAI\Tools\ToolProperty;
-use NeuronAI\Tools\PropertyType;
-
-$weatherTool = Tool::make('get_weather', 'Get weather for a location')
-    ->addProperty(
-        ToolProperty::make(
-            name: 'location',
-            type: PropertyType::STRING,
-            description: 'City name',
-            required: true
-        )
-    )
-    ->setCallable(function (string $location): string {
-        // Your logic here
-        return "Weather in {$location}: Sunny, 22°C";
-    });
-```
-
-### Method 3: Class with Dependencies
-
-For tools that need external dependencies (database, API client):
+For tools that need external dependencies (database, API client), keep the constructor for dependencies and set `name`/`description` as class property defaults:
 
 ```php
 use NeuronAI\Tools\Tool;
+use NeuronAI\Tools\ToolOutput;
 use NeuronAI\Tools\ToolProperty;
 use NeuronAI\Tools\PropertyType;
 use PDO;
 
 class DatabaseQueryTool extends Tool
 {
+    protected string $name = 'query_users';
+
+    protected ?string $description = 'Query user data from the database';
+
     public function __construct(protected PDO $pdo)
     {
-        parent::__construct(
-            name: 'query_users',
-            description: 'Query user data from the database'
-        );
     }
 
     protected function properties(): array
@@ -143,7 +117,7 @@ class DatabaseQueryTool extends Tool
         ];
     }
 
-    public function __invoke(?string $email = null, ?int $limit = 10): array
+    public function __invoke(?string $email = null, ?int $limit = 10): ToolOutput
     {
         $query = "SELECT * FROM users";
 
@@ -161,7 +135,7 @@ class DatabaseQueryTool extends Tool
         $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
 
         $stmt->execute();
-        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        return ToolOutput::text(json_encode($stmt->fetchAll(PDO::FETCH_ASSOC)));
     }
 }
 ```
@@ -297,7 +271,43 @@ new ArrayProperty(
 
 ### Return Values
 
-Tools must return a string or stringifiable value:
+The default return type is `ToolOutput` — a multimodal result that wraps content blocks (text, images, files, audio, video) sent back to the model:
+
+```php
+use NeuronAI\Tools\ToolOutput;
+
+// Text output (most common)
+public function __invoke(string $query): ToolOutput
+{
+    return ToolOutput::text("Result: {$query}");
+}
+```
+
+Single-block factory shortcuts: `ToolOutput::text(...)`, `::image(...)`, `::file(...)`, `::audio(...)`, `::video(...)` — plus `::error(...)` for conversational failures (see Error Handling below).
+
+For multi-block outputs, pass the content blocks to the constructor:
+
+```php
+use NeuronAI\Chat\Enums\MediaType;
+use NeuronAI\Chat\Enums\SourceType;
+use NeuronAI\Chat\Messages\ContentBlocks\ImageContent;
+use NeuronAI\Chat\Messages\ContentBlocks\TextContent;
+use NeuronAI\Tools\ToolOutput;
+
+public function __invoke(string $symbol): ToolOutput
+{
+    return new ToolOutput([
+        new TextContent("Price chart for {$symbol}"),
+        new ImageContent($base64, SourceType::BASE64, MediaType::PNG),
+    ]);
+}
+```
+
+Use the `MediaType` enum for common MIME types; `mediaType` parameters (content blocks and `ToolOutput` factories alike) also accept a plain string for custom types.
+
+Providers whose API accepts content blocks in tool results map them natively; text-only providers fall back to `ToolOutput::getText()` — the concatenated text blocks (empty when there are none, so include a `TextContent` in outputs meant to work everywhere).
+
+Plain string and array returns are still supported:
 
 ```php
 // String
@@ -311,22 +321,12 @@ public function __invoke(string $query): array
 {
     return ['status' => 'success', 'data' => []];
 }
-
-// Object with __toString
-public function __invoke(): Stringable
-{
-    return new class implements Stringable {
-        public function __toString(): string {
-            return 'result';
-        }
-    };
-}
 ```
 
 ### Accessing Inputs Directly
 
 ```php
-public function __invoke(string $query, ?string $filter = null): string
+public function __invoke(string $query, ?string $filter = null): ToolOutput
 {
     // Access individual input
     $value = $this->getInput('query');
@@ -343,18 +343,22 @@ public function __invoke(string $query, ?string $filter = null): string
 
 ### Error Handling
 
+A failure the model should see and recover from is *returned* as `ToolOutput::error()` — the feedback becomes the tool result, marked as an error for providers with a native flag (Anthropic, Bedrock), and the agent loop continues. An exception that escapes `__invoke()` is treated as a bug: it propagates and aborts the run. Catch your own exceptions at the tool boundary and convert them:
+
 ```php
-public function __invoke(string $url): string
+public function __invoke(string $url): ToolOutput
 {
     try {
         $response = $this->httpClient->get($url);
-        return (string) $response->getBody();
+        return ToolOutput::text((string) $response->getBody());
     } catch (\Exception $e) {
-        // Return error message for the LLM to understand
-        return "Error fetching URL: {$e->getMessage()}";
+        // Conversational failure: the LLM sees this and can recover
+        return ToolOutput::error("Error fetching URL: {$e->getMessage()}");
     }
 }
 ```
+
+For cross-cutting handling of escaped exceptions, the agent-level `toolErrorHandler(fn (Throwable $e, ToolCall $call): string|ToolOutput|null)` can settle a result (string or `ToolOutput`) to continue the loop, or return `null` to decline — the exception then propagates.
 
 ## Tool Visibility
 
@@ -378,6 +382,26 @@ Limit how many times a tool can be called in a single session:
 $tool->setMaxRuns(5);  // Maximum 5 calls per session
 ```
 
+## Declaring Approval Risk
+
+Human oversight of tool execution is built into the agent: before running a tool it asks the tool whether it needs approval. A tool declares its own risk by overriding the protected `approvalPolicy()` hook. Returning a **string counts as `true` and doubles as the reason** shown to the approver:
+
+```php
+class TransferMoneyTool extends Tool
+{
+    protected function approvalPolicy(array $inputs): bool|string
+    {
+        return ($inputs['amount'] ?? 0) > 100
+            ? 'Transfers above $100 require a human sign-off'
+            : false;
+    }
+}
+```
+
+The default is `false` (no approval). Whoever attaches the tool can override the declaration in both directions with `requireApproval()`, `suppressApproval()`, or `withApprovalPolicy()`. The last configured override wins.
+
+Submit approval decisions with `Agent::submitApprovalDecisions($decisions)->run()` and deferred execution outcomes with `Agent::submitToolResults($results)->run()`; use `events()` for streaming. Both accept maps keyed by tool call ID. Use the **neuron-tool-approval** skill for the rest of the flow: enabling persistence, rendering the approve/deny UI from chat history, and submitting decisions.
+
 ## Creating Toolkits
 
 Toolkits group related tools together with shared context.
@@ -391,18 +415,16 @@ class CalculatorToolkit extends AbstractToolkit
 {
     public function guidelines(): ?string
     {
-        return "This toolkit allows you to perform mathematical operations.
-        You can use these functions to solve mathematical expressions
-        step by step to calculate the final result.";
+        return "This toolkit performs mathematical calculations with precision and determinism.
+        Pass whole formulas to the evaluate tool instead of computing intermediate steps yourself.";
     }
 
     public function provide(): array
     {
         return [
-            SumTool::make(),
-            SubtractTool::make(),
-            MultiplyTool::make(),
-            DivideTool::make(),
+            EvaluateTool::make(),
+            FactorialTool::make(),
+            MeanTool::make(),
         ];
     }
 }
@@ -546,7 +568,7 @@ $mcpTools = McpConnector::make([
 ])->tools();
 ```
 
-### MCP Tool Filtering
+### MCP Tool Filtering and Configuration
 
 ```php
 // Exclude specific tools
@@ -562,6 +584,16 @@ $mcpTools = McpConnector::make([
     'url' => 'https://mcp.example.com',
 ])
     ->only(['search', 'read', 'write'])
+    ->tools();
+
+// Configure a specific tool by its server-assigned name
+$mcpTools = McpConnector::make([
+    'url' => 'https://mcp.example.com',
+])
+    ->with(
+        name: 'delete_record',
+        callback: fn (Tool $tool): void => $tool->requireApproval()  // Human-in-the-loop on a destructive tool
+    )
     ->tools();
 ```
 
@@ -639,31 +671,31 @@ ToolProperty::make(
 ### 4. Return Structured Data
 
 ```php
-public function __invoke(string $query): string
+public function __invoke(string $query): ToolOutput
 {
     $results = $this->search($query);
 
     // Return structured JSON
-    return json_encode([
+    return ToolOutput::text(json_encode([
         'success' => true,
         'query' => $query,
         'count' => count($results),
         'results' => $results,
-    ]);
+    ]));
 }
 ```
 
 ### 5. Handle Errors Gracefully
 
 ```php
-public function __invoke(string $url): string
+public function __invoke(string $url): ToolOutput
 {
     if (!filter_var($url, FILTER_VALIDATE_URL)) {
-        return json_encode([
+        return ToolOutput::text(json_encode([
             'success' => false,
             'error' => 'Invalid URL format',
             'hint' => 'Please provide a valid URL starting with http:// or https://'
-        ]);
+        ]));
     }
 
     // ...
@@ -673,14 +705,14 @@ public function __invoke(string $url): string
 ### 6. Validate Inputs
 
 ```php
-public function __invoke(string $email, int $limit = 10): string
+public function __invoke(string $email, int $limit = 10): ToolOutput
 {
     if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-        return "Invalid email format: {$email}";
+        return ToolOutput::text("Invalid email format: {$email}");
     }
 
     if ($limit < 1 || $limit > 100) {
-        return "Limit must be between 1 and 100, got: {$limit}";
+        return ToolOutput::text("Limit must be between 1 and 100, got: {$limit}");
     }
 
     // ...
@@ -695,7 +727,7 @@ public function __invoke(
     string $query,
     ?int $limit = 10,
     bool $includeMetadata = false
-): string {
+): ToolOutput {
     // ...
 }
 ```
@@ -704,10 +736,10 @@ public function __invoke(
 
 | Toolkit | Purpose |
 |---------|---------|
-| `CalculatorToolkit` | Math operations (sum, subtract, multiply, divide, etc.) |
+| `CalculatorToolkit` | Math: expression evaluation, exact integer arithmetic, statistics |
 | `MySQLToolkit` | MySQL database queries |
 | `PostgreSQLToolkit` | PostgreSQL database queries |
-| `FileSystemToolkit` | File operations (read, write, edit, delete, glob) |
+| `FileSystemToolkit` | File operations (read, write, edit, delete, glob, bash); `make(scope: '/path')` confines the file tools to a directory and anchors bash there |
 | `TavilyToolkit` | Web search and crawling |
 | `JinaToolkit` | URL reading and web search |
 | `SESToolkit` | AWS SES email sending |
@@ -732,6 +764,7 @@ declare(strict_types=1);
 namespace App\Neuron\Tools;
 
 use NeuronAI\Tools\Tool;
+use NeuronAI\Tools\ToolOutput;
 use NeuronAI\Tools\ToolProperty;
 use NeuronAI\Tools\ArrayProperty;
 use NeuronAI\Tools\ObjectProperty;
@@ -740,15 +773,14 @@ use GuzzleHttp\Client;
 
 class GitHubSearchTool extends Tool
 {
+    protected string $name = 'github_search';
+
+    protected ?string $description = 'Search GitHub repositories. Returns repository names, descriptions, stars, and URLs.';
+
     private Client $client;
 
     public function __construct()
     {
-        parent::__construct(
-            name: 'github_search',
-            description: 'Search GitHub repositories. Returns repository names, descriptions, stars, and URLs.'
-        );
-
         $this->client = new Client([
             'base_uri' => 'https://api.github.com',
             'headers' => [
@@ -787,7 +819,7 @@ class GitHubSearchTool extends Tool
         string $query,
         ?string $sort = 'stars',
         ?int $limit = 10
-    ): string {
+    ): ToolOutput {
         $limit = min(max($limit ?? 10, 1), 100);
 
         try {
@@ -811,17 +843,17 @@ class GitHubSearchTool extends Tool
                 ];
             }, $data['items'] ?? []);
 
-            return json_encode([
+            return ToolOutput::text(json_encode([
                 'success' => true,
                 'count' => count($results),
                 'results' => $results,
-            ]);
+            ]));
 
         } catch (\Exception $e) {
-            return json_encode([
+            return ToolOutput::text(json_encode([
                 'success' => false,
                 'error' => $e->getMessage(),
-            ]);
+            ]));
         }
     }
 }
@@ -859,7 +891,8 @@ class WeatherToolTest extends TestCase
 
         $tool->execute();
 
-        $result = json_decode($tool->getResult(), true);
+        // getResult() returns string|ToolOutput; cast to string for the text projection
+        $result = json_decode((string) $tool->getResult(), true);
         $this->assertArrayHasKey('temperature', $result);
         $this->assertEquals('Paris, France', $result['location']);
     }
