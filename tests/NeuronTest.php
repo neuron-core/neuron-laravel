@@ -13,6 +13,7 @@ use NeuronAI\Tools\ToolInterface;
 use NeuronAI\Workflow\Events\Event;
 use NeuronAI\Workflow\Middleware\WorkflowMiddleware;
 use NeuronAI\Workflow\NodeInterface;
+use NeuronAI\Workflow\WorkflowResources;
 use NeuronAI\Workflow\WorkflowState;
 use ReflectionClass;
 
@@ -25,11 +26,11 @@ class MarkerMiddleware implements WorkflowMiddleware
     {
     }
 
-    public function before(NodeInterface $node, Event $event, WorkflowState $state): void
+    public function before(NodeInterface $node, Event $event, WorkflowState $state, WorkflowResources $resources): void
     {
     }
 
-    public function after(NodeInterface $node, Event $result, WorkflowState $state): void
+    public function after(NodeInterface $node, Event $result, WorkflowState $state, WorkflowResources $resources): void
     {
     }
 }
