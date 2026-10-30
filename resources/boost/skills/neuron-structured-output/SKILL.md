@@ -476,6 +476,7 @@ class Team
 ```php
 use NeuronAI\StructuredOutput\Validation\Rules\IsTrue;
 use NeuronAI\StructuredOutput\Validation\Rules\IsFalse;
+use NeuronAI\StructuredOutput\SchemaProperty;
 use NeuronAI\StructuredOutput\Validation\Rules\IsNull;
 use NeuronAI\StructuredOutput\Validation\Rules\IsNotNull;
 
@@ -487,8 +488,10 @@ class Settings
     #[IsFalse]
     public bool $isBlocked;
 
+    // Rules skip an optional property the model leaves out: required makes this one due
+    #[SchemaProperty(required: true)]
     #[IsNotNull]
-    public ?string $optionalValue;
+    public ?string $referralCode;
 }
 ```
 
@@ -565,7 +568,7 @@ class Contact
 | `Length` | String length bounds | `#[Length(min: 1, max: 100)]` |
 | `WordsCount` | Word count bounds | `#[WordsCount(min: 5, max: 50)]` |
 | `Email` | Valid email format | `#[Email]` |
-| `Url` | Valid URL format | `#[Url]` |
+| `Url` | Valid http or https URL (`schemes:` accepts others) | `#[Url]` |
 | `IPAddress` | Valid IP address | `#[IPAddress]` |
 | `Json` | Valid JSON string | `#[Json]` |
 | `Enum` | Value in allowed list | `#[Enum(class: Status::class)]` |
@@ -603,7 +606,7 @@ class Person
 }
 
 // Use with agent
-$agent = MyAgent::make();
+$agent = MyAgent::make()->setThreadId('demo');
 
 $person = $agent->structured(
     new UserMessage("I'm John Doe, I'm 30 years old and I love pizza!"),
@@ -684,6 +687,8 @@ Deserializer handles various date formats:
 - ISO 8601 strings: `"2024-01-15T10:30:00Z"`
 - Unix timestamps: `1705320600`
 - Relative formats: `"next Monday"`
+
+A property typed `DateTimeInterface` receives a `DateTimeImmutable`.
 
 ## Best Practices
 

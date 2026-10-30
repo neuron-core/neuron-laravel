@@ -57,7 +57,7 @@ class WeatherTool extends Tool
         ];
     }
 
-    public function __invoke(string $location, ?string $units = 'celsius'): ToolOutput
+    public function __invoke(string $location, string $units = 'celsius'): ToolOutput
     {
         // Your API call or logic here
         $weatherData = $this->fetchWeather($location, $units);
@@ -117,7 +117,7 @@ class DatabaseQueryTool extends Tool
         ];
     }
 
-    public function __invoke(?string $email = null, ?int $limit = 10): ToolOutput
+    public function __invoke(?string $email = null, int $limit = 10): ToolOutput
     {
         $query = "SELECT * FROM users";
 
@@ -362,17 +362,20 @@ For cross-cutting handling of escaped exceptions, the agent-level `toolErrorHand
 
 ## Tool Visibility
 
-Hidden tools are executable but not shown to the LLM:
+A hidden tool is off the agent: it is not offered to the LLM, and a call naming it fails with `ToolException`. Hiding works the same inside a toolkit:
 
 ```php
-// Visible to LLM (default)
+// Offered to the LLM (default)
 $tool->visible(true);
 
-// Hidden from LLM schema but still callable
+// Neither offered nor callable
 $tool->visible(false);
+
+// A toolkit tool, hidden the same way
+$toolkit->with(DeleteFileTool::class, fn (ToolInterface $tool): ToolInterface => $tool->visible(false));
 ```
 
-Use case: Internal tools called by other tools, not directly by the agent.
+Use case: attaching a tool only under a condition, such as `DeleteFileTool::make()->visible($user->isAdmin())`.
 
 ## Max Runs
 
@@ -389,9 +392,9 @@ Human oversight of tool execution is built into the agent: before running a tool
 ```php
 class TransferMoneyTool extends Tool
 {
-    protected function approvalPolicy(array $inputs): bool|string
+    protected function approvalPolicy(): bool|string
     {
-        return ($inputs['amount'] ?? 0) > 100
+        return ($this->inputs['amount'] ?? 0) > 100
             ? 'Transfers above $100 require a human sign-off'
             : false;
     }
@@ -467,14 +470,20 @@ use NeuronAI\Agent\Agent;
 
 class MyAgent extends Agent
 {
+    // Dependencies arrive through the constructor, e.g. when the agent is resolved from a container
+    public function __construct(protected PDO $pdo)
+    {
+        parent::__construct();
+    }
+
     protected function tools(): array
     {
         return [
             // Use full toolkit
-            ...CalculatorToolkit::make(),
+            CalculatorToolkit::make(),
 
             // Use toolkit with dependencies
-            ...MySQLToolkit::make($this->pdo),
+            MySQLToolkit::make($this->pdo),
         ];
     }
 }
@@ -486,24 +495,43 @@ Control which tools are exposed:
 
 ```php
 // Exclude specific tools
-...MySQLToolkit::make($pdo)
+MySQLToolkit::make($pdo)
     ->exclude([MySQLWriteTool::class]),
 
 // Include only specific tools
-...MySQLToolkit::make($pdo)
+MySQLToolkit::make($pdo)
     ->only([MySQLSchemaTool::class, MySQLSelectTool::class]),
 
 // Configure tools dynamically
-...MyToolkit::make()
+MyToolkit::make()
     ->with(ExpensiveTool::class, function (Tool $tool): Tool {
         $tool->setMaxRuns(1);  // Limit expensive operations
         return $tool;
     }),
 ```
 
+Tool names must be unique among an agent's tools, or the run fails with a `ToolException` before the first inference. Toolkits can collide: Tavily and Jina both provide `web_search` and `url_reader`. Rename one side, or leave it out:
+
+```php
+JinaToolkit::make($key)
+    ->with(JinaWebSearch::class, fn (ToolInterface $tool): ToolInterface => $tool->setName('jina_web_search'))
+    ->with(JinaUrlReader::class, fn (ToolInterface $tool): ToolInterface => $tool->setName('jina_url_reader')),
+```
+
+### Adding Tools to a Toolkit
+
+`add()` appends tools to the ones a toolkit provides, without subclassing it:
+
+```php
+MySQLToolkit::make($pdo)
+    ->add(new SalesReportTool($pdo), new ExportCsvTool($pdo)),
+```
+
+Added tools follow the provided ones and are covered by the toolkit's guidelines. `only()`, `exclude()` and `with()` apply to them too, so an `only()` list must name an added tool's class to keep it.
+
 ## MCP (Model Context Protocol) Integration
 
-MCP allows connecting to external tool servers.
+MCP allows connecting to external tool servers. Each server tool becomes a regular Neuron tool whose result is a `ToolOutput`: text, image and audio content become content blocks, other content reaches the model as JSON text, and a result the server marks with `isError` is an error output.
 
 ### Local MCP Server (Stdio)
 
@@ -516,6 +544,8 @@ $mcpTools = McpConnector::make([
     'args' => ['-y', '@modelcontextprotocol/server-filesystem', '/path/to/dir'],
 ])->tools();
 ```
+
+`command` is the program to run and `args` holds its arguments. The server starts directly, without a shell, so shell syntax is taken literally and `'command' => 'npx -y server'` fails to start. On Windows, npm shims need their extension: `'command' => 'npx.cmd'`.
 
 ### HTTP MCP Server
 
@@ -567,6 +597,8 @@ $mcpTools = McpConnector::make([
     ],
 ])->tools();
 ```
+
+A stdio server inherits only `HOME`, `LOGNAME`, `PATH`, `SHELL`, `TERM` and `USER` from the application (on Windows, their equivalents such as `USERPROFILE`, `APPDATA` and `SYSTEMROOT`), as the official MCP SDKs do. Pass anything else it needs through `env`: API keys and tokens, `HTTPS_PROXY`, `LANG`.
 
 ### MCP Tool Filtering and Configuration
 
@@ -624,6 +656,8 @@ class MyAgent extends Agent
 }
 ```
 
+A connector keeps one session per process and recovers it: an expired HTTP session or a stdio server that exited is replaced on the next request, and a forked child (`parallelToolCalls()`) opens its own. A long-lived connector, such as a container singleton, is safe to reuse.
+
 ## Best Practices
 
 ### 1. Write Clear Descriptions
@@ -667,6 +701,8 @@ ToolProperty::make(
     enum: ['date', 'relevance', 'popularity']
 )
 ```
+
+The enum is enforced when inputs are bound: a value outside it never reaches `__invoke()`, and the model receives `Parameter "sort_by" must be one of "date", "relevance", "popularity"; "rating" given.` to correct its call.
 
 ### 4. Return Structured Data
 
@@ -721,11 +757,13 @@ public function __invoke(string $email, int $limit = 10): ToolOutput
 
 ### 7. Use Type Hints
 
+Declare an optional input's default in the `__invoke()` signature. When the model leaves the input out, or sends `null` where the parameter can't take it, the default applies. Make a parameter nullable only when `null` means something to the tool, because a nullable parameter receives the model's `null` as it is. A required input that is missing, or `null` when the property isn't nullable, goes back to the model as feedback, and `__invoke()` isn't called.
+
 ```php
 // Use specific types in __invoke signature
 public function __invoke(
     string $query,
-    ?int $limit = 10,
+    int $limit = 10,
     bool $includeMetadata = false
 ): ToolOutput {
     // ...
@@ -737,14 +775,18 @@ public function __invoke(
 | Toolkit | Purpose |
 |---------|---------|
 | `CalculatorToolkit` | Math: expression evaluation, exact integer arithmetic, statistics |
-| `MySQLToolkit` | MySQL database queries |
-| `PostgreSQLToolkit` | PostgreSQL database queries |
+| `MySQLToolkit` | MySQL schema, read-only queries and writes |
+| `PGSQLToolkit` | PostgreSQL schema, read-only queries and writes |
 | `FileSystemToolkit` | File operations (read, write, edit, delete, glob, bash); `make(scope: '/path')` confines the file tools to a directory and anchors bash there |
 | `TavilyToolkit` | Web search and crawling |
 | `JinaToolkit` | URL reading and web search |
-| `SESToolkit` | AWS SES email sending |
+| `SESTool` | AWS SES email sending, a standalone tool. Deprecated: removed in the next major version |
 | `CalendarToolkit` | Date/time operations |
-| `SupadataYouTubeToolkit` | YouTube video metadata and transcripts |
+| `SupadataYouTubeToolkit` | YouTube video metadata and transcripts. Deprecated: removed in the next major version |
+
+`TavilyToolkit`, `JinaToolkit` and `SupadataYouTubeToolkit` take an optional `httpClient` as their last constructor argument and pass it to their tools, so a test can supply a client it controls: `TavilyToolkit::make($key, httpClient: $client)`.
+
+An agent that should only read keeps the schema and select tools: `MySQLToolkit::make($pdo)->only([MySQLSchemaTool::class, MySQLSelectTool::class])`, and the same with the `PGSQL` classes. The select tool runs each query alone in a read-only transaction that it rolls back, so the database refuses any write. It refuses a query that doesn't start with `SELECT`, `WITH`, `SHOW`, `DESCRIBE` or `EXPLAIN` (on PostgreSQL `SELECT`, `WITH`, `EXPLAIN` or `SHOW`) or that has a `;` before its end, and on MySQL one that contains `OUTFILE`, `DUMPFILE` or `LOAD_FILE`. It throws when the connection is already inside a transaction. It can still read everything the connection's user can read, and call functions that don't write, such as sleeps, file reads for privileged users or ending the user's other sessions. A dedicated connection with a user that can only `SELECT` the tables the agent needs, and a statement timeout, closes those gaps: recommend it to the developer as their decision, and never create database users, change grants or edit connection settings without their approval.
 
 ## CLI Generation
 

@@ -7,6 +7,8 @@ description: Build or modify Neuron AI Workflow graphs, including nodes, events,
 
 This skill helps you build custom event-driven workflows in Neuron AI. Workflows are the foundation of the entire framework - Agent and RAG are built on top of Workflow.
 
+Setters configure the reusable definition, including while a segment is running. An execution retains its resolved graph, resources, completion policy and event dispatcher. New listener registrations apply to subsequent segments. A call made while a segment is in flight meets the persisted run as another process would: the running generation refuses a new ignition.
+
 ## Core Concepts
 
 ### Event-Driven Architecture
@@ -92,7 +94,7 @@ $state = new WorkflowState([
     'input' => $userData,
 ]);
 
-$workflow = Workflow::make(state: $state)
+$workflow = Workflow::make(workflowId: 'demo', state: $state)
     ->addNodes([
         new ValidationNode(),
         new ProcessingNode(),
@@ -123,34 +125,30 @@ class MyWorkflow extends Workflow
 
 ### Execution API
 
-`run()` and `events()` are the only execution terminals. Staged operations
-distinguish a fresh execution from continuation:
+Import `NeuronAI\Workflow\Executor\ExecutionRequest`. Execution is explicit:
 
 | Call | Meaning |
 |---|---|
-| `run()` | Start or recover a failed run and return its final `TState` (`WorkflowState` by default). |
-| `resume()->run()` | Continue without external input: evaluate due waits or recover a crashed/failed attempt. |
-| `resume($payload, $expectedRunId?, $expectedExecutionAttempt?)->run()` | Answer the current interruption with one plain payload. |
-| `events()` | Start or recover a failed run and yield intermediate output; `getReturn()` is the final `TState`. |
-| `resume()->events()` / `resume($payload, ...)->events()` | Stream an inputless continuation or one response. |
-| `signal($name, $payload)->run()` | Deliver an application event, then continue eagerly. |
-| `signal($name, $payload)->events()` | Deliver an application event, then stream the continued segment. |
-| `abandonRun($expectedRunId?)` | Discard the run holding the workflow ID so a new one can ignite; `false` when nothing is in flight. Refuses a retained completion and a run under a fresh lease. |
+| `run(ExecutionRequest::start($event, runId: $id))` | Fresh input with an optional caller-reserved generation. |
+| `run()` | Start or recover a failed run and return state. |
+| `run(ExecutionRequest::resume())` | Recover, process a due deadline, or retrieve a retained outcome. |
+| `run(ExecutionRequest::resume($answer, expectedRunId: $id, expectedExecutionAttempt: $attempt))` | Deliver a fenced answer. |
+| `run(ExecutionRequest::signal($name, $payload))` | Require the current interruption's event name to match. |
+| `events($request)` | Always a lazy generator, including when a channel is configured. |
+| `abandon($runId, $attempt)` | Fenced cleanup, subject to lease/completion protections. |
 
-`resume($payload)` answers the current interruption. `resume([])` is an empty
-answer; `resume()` supplies no answer and handles recovery or due deadlines.
-Timer and expiry inputs are constructed internally.
+`run()` always consumes execution; iteration over `events()` also delivers to any
+configured channel. Requests are independent values and are never staged on the
+workflow. Empty resume payloads are answers; null is inputless continuation.
+Signals are neither queued nor broadcast.
 
-`signal($name, $payload)` answers that same current interruption only when its
-event name matches. A mismatch throws. Signals are not queued or broadcast.
-Only one continuation may be staged before the following terminal call.
-
-Continuation fences belong to `resume()`, including inputless continuations.
-Only one operation may be staged: `resume()`, `signal()`, or `submitInputs()`.
-For Agent tool approval and deferred tool results, use
-`submitApprovalDecisions($decisions)` and `submitToolResults($results)` instead,
-followed by `run()` or `events()`. The generic Workflow examples below remain
-useful for custom interruptions.
+`submitInputs()`, Agent `submitApprovalDecisions()` and `submitToolResults()` return
+`PendingExecution` objects holding a workflow and its immutable fenced request.
+Chain `->run()` or `->events()` on the result. `submitInputs($payload)` accepts a
+native interruption response; optionally supply a translator as the second argument
+for external payloads. Running the same pending execution twice fails as stale:
+its input is delivered once.
+Use resource hooks or factories for per-segment resources. They return a fresh resource and never mutate a running definition. See `src/Workflow/AGENTS.md` for execution ownership and hook signatures.
 
 ## Workflow State
 
@@ -187,7 +185,7 @@ $all = $state->all();
 ### Typed Workflow State
 
 `Workflow` is generic in PHPDoc. Bind a custom state once on the subclass;
-`run()`, `events()->getReturn()`, `getState()`, and `setState()` then retain
+`run()`, `events()->getReturn()`, and configured `setState()` seeds then retain
 that concrete type without forwarding methods or inline assertions:
 
 ```php
@@ -204,10 +202,65 @@ final class OrderWorkflow extends Workflow
     }
 }
 
-$state = OrderWorkflow::make()->run(); // inferred as OrderState
+$state = OrderWorkflow::make(workflowId: $orderId)->run(); // inferred as OrderState
 ```
 
-`Agent` uses the same contract by specializing `Workflow<AgentState>`.
+`Agent` uses the same contract by specializing `Workflow<AgentState>`. A node asking for
+a state class the workflow does not provide fails when the graph is built.
+
+## Workflow Resources
+
+State is what a run knows; resources are what it can use. Services that nodes and
+middleware share, such as API clients and connections, belong in a `WorkflowResources`
+subclass built by the `resources()` hook or by a factory passed to `setResources()`.
+The workflow builds them once per execution segment and never persists them, so a
+resumed run gets live services again.
+
+```php
+use NeuronAI\Workflow\Events\StartEvent;
+use NeuronAI\Workflow\Events\StopEvent;
+use NeuronAI\Workflow\Node;
+use NeuronAI\Workflow\Workflow;
+use NeuronAI\Workflow\WorkflowResources;
+use NeuronAI\Workflow\WorkflowState;
+
+class CrmResources extends WorkflowResources
+{
+    public function __construct(public readonly CrmClient $crm)
+    {
+        parent::__construct();
+    }
+}
+
+class LeadWorkflow extends Workflow
+{
+    protected function resources(): CrmResources
+    {
+        return new CrmResources(new CrmClient(getenv('CRM_KEY')));
+    }
+
+    protected function nodes(): array
+    {
+        return [new EnrichLeadNode()];
+    }
+}
+
+class EnrichLeadNode extends Node
+{
+    public function __invoke(StartEvent $event, WorkflowState $state, CrmResources $resources): StopEvent
+    {
+        $state->set('lead', $resources->crm->find($state->get('email')));
+
+        return new StopEvent();
+    }
+}
+```
+
+The third `__invoke()` parameter is optional. A node asking for a resources class the
+workflow does not provide fails when the graph is built. Middleware receive the same
+object as the fourth argument of `before()` and `after()`. A quick composition can skip
+the subclass: `setResources(fn (): WorkflowResources => new WorkflowResources(['crm' => $crm]))`,
+then `$resources->get('crm')`.
 
 ## Persistence and Durability
 
@@ -221,10 +274,40 @@ After a caught failure, reconstruct the workflow with the same persistence and
 workflow ID and call `run()` or `events()`. A persisted failed execution is recovered
 automatically, reusing completed steps and memoized operations.
 
-Use `resume()->run()` for explicit inputless continuation, including due timers,
+Use `run(ExecutionRequest::resume())` for explicit inputless continuation, including due timers,
 recovery of a process that died without recording failure, and retained outcomes.
-Use `resume($payload, expectedRunId: $runId, expectedExecutionAttempt: $attempt)->run()` for fenced delivery.
-All staging methods are lazy; `run()` and `events()` take no arguments.
+Use `run(ExecutionRequest::resume($payload, expectedRunId: $runId, expectedExecutionAttempt: $attempt))` for fenced delivery.
+All staging methods are inert. A retried reserved start or fenced resume is refused while its run is still persisted, never executed twice; a reserved start with `recoverFailed: true` recovers its own failed or abandoned run instead. A clean completion deletes the run by default, so a reserved start redelivered after it runs again unless the workflow uses `retainCompletionUntilAcknowledged()`.
+Configure context-aware resource factories on the definition before invoking the terminal.
+
+Whatever the engine refuses because of the state a run is in throws
+`WorkflowRefusedException`, and its `reason` says why. Route on the reason, never on
+the message:
+
+```php
+use NeuronAI\Exceptions\WorkflowRefusedException;
+use NeuronAI\Workflow\RefusalReason;
+
+try {
+    $state = $workflow->run($request);
+} catch (WorkflowRefusedException $refused) {
+    match ($refused->reason) {
+        RefusalReason::RunInFlight => ...,  // a start met a run that is not dead
+        RefusalReason::NoRun => ...,        // nothing to continue
+        RefusalReason::StaleRun => ...,     // the expected run is not the current one
+        RefusalReason::StaleAttempt => ..., // the expected, or owned, attempt is no longer current
+        RefusalReason::Executing => ...,    // a process is executing the run, or left it running
+        RefusalReason::NotAwaited => ...,   // the run is not waiting for this input
+        RefusalReason::Completed => ...,    // abandon() met a retained completion: acknowledge it
+        RefusalReason::NotCompleted => ..., // acknowledge() met a run that has not completed
+        RefusalReason::Conflict => ...,     // a concurrent change won: retry
+    };
+}
+```
+
+`RunInFlightException` and `StaleWorkflowRunException` are refusals that also describe
+the run they met. A corrupted record or a programming error stays a plain
+`WorkflowException`, and a node's own exception is a failure of the run, not a refusal.
 
 ### Persistence Backends
 
@@ -232,10 +315,11 @@ All staging methods are lazy; `run()` and `events()` take no arguments.
 use NeuronAI\Workflow\Persistence\DatabasePersistence;use NeuronAI\Workflow\Persistence\EloquentPersistence;use NeuronAI\Workflow\Persistence\FilePersistence;
 use NeuronAI\Workflow\Persistence\RedisPersistence;
 
-// File system — directory is auto-created if it doesn't exist
+// File system — the directory is created on the first write. File names keep the
+// workflow ID's letter case: on macOS and Windows, IDs that differ only by case share a file
 $persistence = new FilePersistence('/path/to/storage');
 
-// Database via PDO — requires a workflow_store table
+// Database via a PDO in exception mode — requires a workflow_store table
 $persistence = new DatabasePersistence($pdo);
 
 // Eloquent model — requires a model with partition, key, value columns
@@ -250,6 +334,17 @@ $persistence = new RedisPersistence($redis, prefix: 'neuron:workflow:');
 For multiple workers, use `DatabasePersistence`, `EloquentPersistence`, or
 `RedisPersistence`. File storage is for controlled single-process use.
 
+The store must be as trusted as your code: records are PHP objects decoded with
+no class restriction, so whoever can write to the store can run code in your
+workers. Credentials only the application uses close that path (a database user
+or Redis ACL user of its own, a directory only the application can write):
+recommend them to the developer as their decision, and never create users,
+change grants or edit connection settings without their approval.
+
+Inside a transaction your application opened on the same connection, the SQL
+backends join it: each operation runs in a savepoint and commits or rolls back
+with your transaction, so tests wrapped in a transaction work unchanged.
+
 Redis stores each workflow partition in one hash and uses Lua scripts for atomic
 conditional writes and deletion. Pass a connected `\Redis` client outside a
 transaction or pipeline. The default prefix is `neuron:workflow:`; use the same
@@ -263,15 +358,15 @@ Configure Redis persistence and eviction to preserve active and retained runs.
 Use the `setPersistence()` shortcut:
 
 ```php
-$workflow = Workflow::make()
+$workflow = Workflow::make(workflowId: $workflowId)
     ->setPersistence(new FilePersistence('/path/to/storage'))
     ->addNodes([...]);
 
 $finalState = $workflow->run();
 ```
 
-Executors carry no storage of their own. Persistence and serialization are
-workflow-owned seams read by the executor at execution time. The record codec
+The engine carries no storage of its own: the workflow builds it for every call
+from its persistence and serializer, both workflow-owned seams. The record codec
 is configurable via `setSerializer()` (default `PhpSerializer`); timers, event
 subscriptions, and queue jobs belong to the calling platform, not Workflow core.
 
@@ -287,7 +382,7 @@ $workflow->setLeaseTimeout(300);
 
 Every step commit renews a deadline inside the control record at no extra
 write. A run whose deadline has passed is treated as dead: the next `run()`
-supersedes it and `resume()->run()` may take it over. Without a lease only `resume()->run()`
+supersedes it and `run(ExecutionRequest::resume())` may take it over. Without a lease only `run(ExecutionRequest::resume())`
 can take over a `running` record. Pick a value above the longest single node
 (a slow provider or tool call). Plain workflows are opt-in; `Agent` holds a
 ten-minute lease by default, and `setLeaseTimeout(null)` disables it. A
@@ -295,27 +390,78 @@ suspended run holds no lease, so a pause never expires on its own.
 
 ### Database Table Schema
 
-When using `DatabasePersistence`, create the single store table (`partition`
-and `key` are reserved words in MySQL — quote them with backticks there):
+When using `DatabasePersistence`, create the single store table. Partition names
+and keys are stored hex-encoded, so their 255-byte limit needs 510 characters;
+values are base64-encoded.
+
+PostgreSQL / SQLite:
 
 ```sql
 CREATE TABLE workflow_store (
-    "partition" VARCHAR(255) NOT NULL,
-    "key"       VARCHAR(255) NOT NULL,
+    "partition" VARCHAR(510) NOT NULL,
+    "key"       VARCHAR(510) NOT NULL,
     "value"     TEXT NOT NULL,
     updated_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY ("partition", "key")
 );
 ```
 
-For `EloquentPersistence`, the model must have `partition`, `key`, and `value` columns.
+MySQL / MariaDB, in strict SQL mode. ASCII identifiers keep the composite primary
+key within InnoDB's 3072-byte limit, and `LONGTEXT` holds states beyond `TEXT`'s
+64 KB:
+
+```sql
+CREATE TABLE workflow_store (
+    `partition` VARCHAR(510) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    `key`       VARCHAR(510) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    `value`     LONGTEXT CHARACTER SET ascii NOT NULL,
+    updated_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`partition`, `key`)
+) ENGINE=InnoDB;
+```
+
+`EloquentPersistence` takes a model class and uses native model queries and mutations.
+For its table, replace the composite primary key shown above with a normal model
+primary key (such as `id`) and a unique constraint on `(partition, key)`. Use
+510-character identifier columns (ASCII binary collation on MySQL) and a value
+column large enough for base64-encoded payloads (`LONGTEXT` on MySQL). Allow mass
+assignment of `partition`, `key`, and `value`; configure timestamps on the model
+and provide the corresponding columns, or disable timestamps. Casts/accessors must
+round-trip the encoded strings. Do not use soft deletes for these records.
+
+Model creation, updates, and deletion emit their normal Eloquent events inside the
+conditional transaction. Cancelled mutations roll back the operation. Use
+Laravel's after-commit handling for listeners that publish external effects.
+
+### Manage runs without constructing a workflow
+
+```php
+use NeuronAI\Workflow\WorkflowEngine;
+
+$engine = new WorkflowEngine($persistence);
+$snapshot = $engine->inspect($workflowId);
+```
+
+The engine requires only persistence and defaults to `PhpSerializer`. Pass a
+custom serializer as the second argument when the workflow uses one. It also
+abandons and acknowledges runs by ID with `abandon($workflowId, ...)` and
+`acknowledge($workflowId, $runId)`; an Agent's own verbs add their guards. Each read
+returns a fresh `WorkflowRunSnapshot` containing identity, status, execution
+attempt, the current interruption and the run's start event (`startEvent`), or
+null if there is no persisted control. It also carries `leaseExpiresAt`, the Unix
+time at which the lease on the run expires (null when it has none),
+`deferredInterrupts`, how many interruptions wait behind the current one, and
+`tag`, the label of 1 to 255 characters given with `ExecutionRequest::start(tag:)` (null when none was).
+Normal completion removes that control; retained completion remains inspectable
+until acknowledged. `$workflow->inspect()` remains available for an already
+configured workflow.
 
 ### Workflow Lifecycle
 
 By default, successful completion conditionally removes the owned workflow
 partition. A platform that must replay a lost completion response can call
 `retainCompletionUntilAcknowledged()` and later
-`acknowledgeCompletion($runId)`. Interrupted workflows retain their active
+`acknowledge($runId)`. Interrupted workflows retain their active
 requests and step records until continued.
 
 ## Human-in-the-Loop Patterns
@@ -325,13 +471,13 @@ Workflows support interruption for human intervention at any point.
 ### Interrupting a Node
 
 `InterruptRequest` is the canonical portable description of the pause. The
-executor clones it, assigns a positive run-scoped ID, persists it while active,
+engine clones it, assigns a positive run-scoped ID, persists it while active,
 and exposes that same ID-bound request to callers. Keep request fields
 serializable; inject live services into the node instead. On a
 continuation, `interrupt()` returns the inbound payload array:
 
 ```php
-use NeuronAI\Agent\Interrupt\ApprovalRequest;use NeuronAI\Workflow\Interrupt\Action;
+use NeuronAI\Agent\Interrupt\ApprovalRequest;use NeuronAI\Agent\Interrupt\Action;
 
 class DangerousOperationNode extends Node
 {
@@ -398,7 +544,7 @@ use NeuronAI\Workflow\Persistence\FilePersistence;
 
 $persistence = new FilePersistence('/tmp/workflows');
 
-$workflow = Workflow::make()
+$workflow = Workflow::make(workflowId: $workflowId)
     ->setPersistence($persistence)
     ->addNodes([...]);
 
@@ -407,7 +553,6 @@ $state = $workflow->run();
 if ($state->isInterrupted()) {
     // Present the request to the user and retain its engine-assigned ID.
     $request = $state->getInterruptRequest();
-    $workflowId = $state->getWorkflowId();
 
     // ... user approves/rejects ...
 
@@ -416,11 +561,10 @@ if ($state->isInterrupted()) {
     $state = Workflow::make(workflowId: $workflowId)
         ->setPersistence($persistence)
         ->addNodes([...])
-        ->signal('approval', [
+        ->run(ExecutionRequest::signal('approval', [
             'delete_files' => 'approve',
             'send_email' => ['reject', 'Do not notify anyone'],
-        ])
-        ->run();
+        ]));
 }
 
 $result = $state->get('result');
@@ -430,18 +574,18 @@ Application-controlled event delivery normally uses the event name and workflow
 ID; `signal()` checks the current request's event name:
 
 ```php
-$state = $workflow->signal('payment.received', $payload)->run();
+$state = $workflow->run(ExecutionRequest::signal('payment.received', $payload));
 ```
 
 Delayed, queued, or platform delivery supplies the observed run ID and execution
 attempt so a stale response cannot reach a later request:
 
 ```php
-$state = $workflow->resume(
+$state = $workflow->run(ExecutionRequest::resume(
     $payload,
     expectedRunId: $suspendedState->getRunId(),
     expectedExecutionAttempt: $suspendedState->getExecutionAttempt(),
-)->run();
+));
 ```
 
 ### Continuing by business key — the workflow ID
@@ -471,13 +615,12 @@ class OrderWorkflow extends Workflow
 // requests without delivering an answer:
 $workflow = OrderWorkflow::make(orderId: $orderId)
     ->setPersistence($persistence);
-$pending = $workflow->resume()->run();
+$pending = $workflow->run(ExecutionRequest::resume());
 $request = $pending->getInterruptRequest();
 
 // Or deliver a known application signal directly.
 $state = $workflow
-    ->signal('approval', ['delete_files' => 'approve'])
-    ->run();
+    ->run(ExecutionRequest::signal('approval', ['delete_files' => 'approve']));
 ```
 
 Rules: **one live run per workflow ID** — a plain `run()` starts or recovers a
@@ -487,15 +630,15 @@ expired. The exception carries `runId`, `status`, `executionAttempt`,
 `leaseExpiresAt`, and the current `interrupt`, and its message names the verb
 that settles the state. A failed generation is recovered automatically.
 A running generation whose lease expired is swept on a new start. Settle a pending run with
-`signal(...)->run()` or `resume($payload)->run()`, or discard it with `abandonRun()`.
+`run(ExecutionRequest::signal(...))` or `run(ExecutionRequest::resume($payload))`, or discard it with `abandon()`.
 Completed records are swept by default,
-so a later explicit continuation such as `resume()->run()` throws "No run in flight";
-a no-input `run()` may start a new generation. A continuation with no workflow
-ID at all throws. A declared `workflowId()` wins over an explicit
-`make($workflowId)`; a disagreement throws (misidentified run). Plain workflows
-that declare no key get a generated workflow ID (`getWorkflowId()` after the
-first segment) and are otherwise unaffected. The `Agent` uses exactly this
-mechanism, with the Agent thread ID used as the workflow ID.
+so a later explicit continuation such as `run(ExecutionRequest::resume())` throws "No run in flight";
+a no-input `run()` may start a new generation. A declared `workflowId()` wins over an explicit
+`make($workflowId)`; a disagreement throws (misidentified run). The framework never
+makes up a workflow ID: bind a workflow that declares no key with `make($workflowId)`
+or `setWorkflowId()`, because executing, inspecting or answering it unbound throws.
+The `Agent` uses exactly this mechanism, with the Agent thread ID used as the
+workflow ID.
 
 ## Interruption Vocabulary (beyond approval)
 
@@ -513,6 +656,22 @@ On the first pass, `interrupt()`, `awaitEvent()`, and `sleepUntil()` pause the
 node internally. Once that interruption is answered, execution re-enters the
 node and the verb returns the inbound payload or timeout result—never the request
 object.
+
+### Waiting more than once
+
+A resumed node runs again from the top. Each answer is recorded, so every wait
+the node already passed returns its own answer and the new one reaches the wait
+that asked for it. Write the waits in order, as if the node never paused:
+
+```php
+$manager = $this->interrupt(new ApprovalRequest('Manager approval'));
+$finance = $this->interrupt(new ApprovalRequest('Finance approval'));
+```
+
+The node must reach its waits in the same order every time it runs, as
+`memoize()` already requires: one that reaches a new wait before the one being
+answered fails with a `WorkflowException`. Code between waits runs again
+whenever the node does, so keep side effects inside `memoize()`.
 
 ### Wait for an external event — `awaitEvent()`
 
@@ -541,14 +700,13 @@ A signal delivers the matched event data as the inbound payload; the node's
 $state = Workflow::make(workflowId: $workflowId)
     ->setPersistence($persistence)
     ->addNodes([...])
-    ->signal('payment.received', $paymentPayload)
-    ->run();
+    ->run(ExecutionRequest::signal('payment.received', $paymentPayload));
 ```
 
-When the deadline elapses, a timer worker invokes `resume()->run()`. Workflow validates
+When the deadline elapses, a timer worker invokes `run(ExecutionRequest::resume())`. Workflow validates
 the clock, resolves every currently due wait, and `awaitEvent()` returns `null`.
 Branch on the node result rather than comparing clocks inside the node;
-expiry is determined internally by the executor.
+expiry is determined internally by the engine.
 
 ### Sleep until a clock time — `sleepUntil()`
 
@@ -557,7 +715,7 @@ expiry is determined internally by the executor.
 $this->sleepUntil($wakeAt);
 ```
 
-When an external timer fires, reconstruct the workflow and call `resume()->run()`;
+When an external timer fires, reconstruct the workflow and call `run(ExecutionRequest::resume())`;
 Workflow checks whether the wake time is actually due. Timer jobs do not
 construct inputs or need interruption IDs.
 
@@ -812,7 +970,7 @@ vendor/bin/neuron make:workflow DataProcessingWorkflow
 - Provide clear, actionable descriptions in InterruptRequest
 - Keep request coordination data and metadata serializable; keep services on nodes
 - Use `memoize()` to avoid re-running expensive operations across an interruption
-- Use `abandonRun()` to discard a run whose awaited event or timer will never come, so the workflow ID is free again
+- Use `abandon()` to discard a run whose awaited event or timer will never come, so the workflow ID is free again
 
 ## Common Patterns
 
@@ -868,6 +1026,19 @@ class LoopNode extends Node
 }
 ```
 
+A loop whose exit never comes, because of a node bug or a model that keeps
+choosing the same route, runs and persists forever. Cap it with a step budget:
+
+```php
+$workflow->setMaxSteps(200);
+```
+
+The run fails with a `WorkflowException` once one of its paths, the main one or
+a parallel branch, goes past that many steps; replayed steps count, so pausing
+does not reset it. There is no budget by default, because some workflows loop
+on purpose; a subclass can return one from the `maxSteps()` hook. After raising
+the budget, a plain `run()` continues the failed run from its completed steps.
+
 ## Parallel Execution
 
 When a node needs to run multiple sub-tasks concurrently (e.g. extracting structured data from an image while also generating a description), use `ParallelEvent` to fork execution into parallel branches.
@@ -882,9 +1053,11 @@ ForkNode → ParallelEvent([branch1 => EventA, branch2 => EventB])
 ```
 
 1. A **fork node** returns a `ParallelEvent` subclass with branch-starting events.
-2. The executor runs each branch independently until `StopEvent`.
+2. The branch runner runs each branch independently until `StopEvent`.
 3. Each branch's `StopEvent::getResult()` is collected into the `ParallelEvent`.
 4. A **join node** (whose `__invoke()` accepts the `ParallelEvent` subclass) reads the results.
+
+Inside a branch, a node reads the branch name from `$this->branchId`; it is null outside a branch.
 
 ### Step 1 — Define a ParallelEvent Subclass
 
@@ -915,7 +1088,6 @@ class GenerateDescriptionEvent implements Event
 ```php
 use NeuronAI\Workflow\Events\StartEvent;
 use NeuronAI\Workflow\Node;
-use NeuronAI\Workflow\WorkflowResources;
 use NeuronAI\Workflow\WorkflowState;
 
 class AnalyzeImageForkNode extends Node
@@ -945,6 +1117,7 @@ class ExtractStructuredDataNode extends Node
     public function __invoke(ExtractStructuredDataEvent $event, WorkflowState $state): StopEvent
     {
         $agent = Agent::make()
+            ->setThreadId($state->getWorkflowId() . ':extract')
             ->setProvider(
                 (new OpenAI(getenv('OPENAI_API_KEY'), 'gpt-4o'))
                     ->setHttpClient(new AmpHttpClient())
@@ -963,6 +1136,7 @@ class GenerateDescriptionNode extends Node
     public function __invoke(GenerateDescriptionEvent $event, WorkflowState $state): StopEvent
     {
         $agent = Agent::make()
+            ->setThreadId($state->getWorkflowId() . ':describe')
             ->setProvider(
                 (new OpenAI(getenv('OPENAI_API_KEY'), 'gpt-4o'))
                     ->setHttpClient(new AmpHttpClient())
@@ -1000,6 +1174,7 @@ class MergeAnalysisNode extends Node
 
 ```php
 $workflow = Workflow::make(
+        workflowId: $analysisId,
         state: new WorkflowState(['image_url' => 'https://example.com/photo.jpg'])
     )
     ->addNodes([
@@ -1014,14 +1189,14 @@ $state = $workflow->run();
 
 ### Sequential vs Concurrent Execution
 
-By default, `WorkflowExecutor` runs branches **sequentially** (one after another). For true concurrency, use `AsyncExecutor`:
+By default, branches run **sequentially** (one after another). For true concurrency, use `AsyncBranchRunner`:
 
 ```php
-use NeuronAI\Workflow\Executor\AsyncExecutor;
+use NeuronAI\Workflow\Executor\AsyncBranchRunner;
 use NeuronAI\Workflow\Workflow;
 
 $workflow = Workflow::make()
-    ->setExecutor(new AsyncExecutor())
+    ->setBranchRunner(new AsyncBranchRunner())
     ->addNodes([
         new AnalyzeImageForkNode(),
         new ExtractStructuredDataNode(),
@@ -1030,18 +1205,19 @@ $workflow = Workflow::make()
     ]);
 ```
 
-`AsyncExecutor` is a drop-in replacement — it runs branches as concurrent Amp futures while keeping linear (non-parallel) nodes sequential as usual.
+`AsyncBranchRunner` runs branches as concurrent Amp futures while keeping linear (non-parallel) nodes sequential as usual. A subclass can choose it in the `branchRunner()` hook instead of the setter.
 
-Async branch invocations receive shallow-cloned node wrappers so the mutable
-execution context injected by `Node` cannot leak between fibers. Keep durable
-branch data in `WorkflowState` or branch events; injected service objects remain
-shared unless the application gives them their own isolation.
+The branches share the workflow's nodes. A node holds the context of the step it
+runs, so two branches running concurrently must not reach the same node: give
+each branch its own event and node, or keep the sequential runner. Keep durable
+branch data in `WorkflowState` or branch events; services in the resources are
+shared by every branch.
 
 ### AsyncWorkflow with AmpHttpClient
 
-For fully asynchronous execution where branches make HTTP calls to AI providers concurrently, combine `AsyncExecutor` with `AmpHttpClient`:
+For fully asynchronous execution where branches make HTTP calls to AI providers concurrently, combine `AsyncBranchRunner` with `AmpHttpClient`:
 
-- **`AsyncExecutor`** runs parallel branches as concurrent Amp fibers (non-blocking).
+- **`AsyncBranchRunner`** runs parallel branches as concurrent Amp fibers (non-blocking).
 - **`AmpHttpClient`** is the async HTTP client built on `amphp/http-client`. Inject it on the provider via `->setHttpClient(new AmpHttpClient())` to ensure HTTP calls inside each branch are non-blocking.
 
 Without `AmpHttpClient`, each branch's HTTP call would block its fiber, negating the concurrency benefit. With it, all branches make their API calls truly in parallel — a workflow that extracts structured data and generates a description simultaneously completes in the time of the slower branch, not the sum of both.
@@ -1055,8 +1231,8 @@ $provider = (new OpenAI(getenv('OPENAI_API_KEY'), 'gpt-4o'))
 
 ### Parallel Branches with Interruptions
 
-Parallel branches expose one interruption at a time. The normal executor stops
-at the first interruption. AsyncExecutor lets nodes already running finish and
+Parallel branches expose one interruption at a time. The sequential runner stops
+at the first interruption. `AsyncBranchRunner` lets nodes already running finish and
 persist their result or interruption, then starts no further nodes. Streams are
 drained through that node's terminal result. A memo write is durable but does
 not suspend the node midway through its invocation.
@@ -1073,7 +1249,7 @@ $state = $workflow->run();
 if ($state->isInterrupted()) {
     $request = $state->getInterruptRequest();
     // Collect an answer for this request, then continue the same workflow.
-    $state = $workflow->resume(['answer' => $decision])->run();
+    $state = $workflow->run(ExecutionRequest::resume(['answer' => $decision]));
     // The result may expose the next request.
 }
 ```

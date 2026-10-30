@@ -14,7 +14,17 @@ AgentStartEvent → PreProcessNode → RetrievalNode → PostProcessNode → Ins
 1. Pre-process the user question (query rewriting/expansion)
 2. Retrieve relevant documents from the vector store
 3. Post-process (re-rank, filter by score)
-4. Build document-enriched instructions and run the normal inference
+4. Send the documents with the question, as context of the turn, and run the normal inference
+
+The documents are not added to the instructions and not stored in the chat history. They reach the model in the question's own message, after the question, inside `<EXTRA-CONTEXT>` tags:
+
+```
+system   <your instructions>
+user     <the question>
+         <EXTRA-CONTEXT> ...retrieved documents... </EXTRA-CONTEXT>
+```
+
+Write instructions that fit this position, such as "answer from the context that follows the question". When nothing is retrieved, the question is sent alone. Because the instructions no longer change with each question, they and the conversation can be cached: see "Turn context" in the `neuron-agent` skill.
 
 ## Core Components
 
@@ -60,7 +70,9 @@ class MyChatBot extends RAG
 }
 ```
 
-Fluent alternatives exist for every hook: `setEmbeddingsProvider()`, `setVectorStore()`, `setRetrieval()`, `setPreProcessors()`, `setPostProcessors()`.
+Fluent alternatives exist for every hook: `setEmbeddingsProvider()`, `setVectorStore()`, `setRetrieval()`, `setPreProcessors()`, `setPostProcessors()`. An explicit setter wins over its hook.
+
+Configuration setters may be called during execution. Each segment keeps its resolved processors, retrieval strategy and scope. The default retrieval strategy is constructed per segment from the currently configured embeddings provider and vector store. An explicit `setRetrieval()` strategy remains an application-supplied service and takes precedence over that default.
 
 ## Vector Stores
 
@@ -229,7 +241,7 @@ $rag->addDocuments(
 $rag->addDocuments($documents, chunkSize: 100);   // when the embeddings provider needs a different batch
 ```
 
-Repeated ingestion creates duplicate chunks. `reindexBySource()` groups the new documents by `sourceType`/`sourceName`, deletes the old documents for each source, then adds the new chunks (destructive for those sources):
+Repeated ingestion creates duplicate chunks. `reindexBySource()` replaces each source instead: it validates the whole batch, then, for each `sourceType`/`sourceName`, embeds the new chunks before deleting the old ones and storing the new. A failed validation or embedding call leaves the source as it was; if the vector store fails after the delete, run the same call again:
 
 ```php
 $rag->reindexBySource($documents);
@@ -276,7 +288,7 @@ $rag->setRetrieval(new CustomRetrieval());
 
 ## Conversation memory and multiple retrievers
 
-Use `SemanticMemoryRetrieval($store, $embeddings, $authorizedThreadIds)` to recall conversation documents without constructing filters. Combine it with document retrieval through `CompositeRetrieval([$memoryRetrieval, $documentRetrieval])`. Both implement the existing `RetrievalInterface`. Creation is independent: opt into `ConversationIngestionNode` in `exitNodes()`. See [conversation memory](../neuron-agent/references/conversation-memory.md) for complete examples and lifecycle semantics.
+Use `SemanticMemoryRetrieval($store, $embeddings, $authorizedThreadIds)` to recall conversation documents without constructing filters. Combine it with document retrieval through `CompositeRetrieval([$memoryRetrieval, $documentRetrieval])`. Both implement the existing `RetrievalInterface`. Creation is independent: opt into `ConversationIngestionNode` in `exitNodes()`, with a dedicated conversation store. See [conversation memory](../neuron-agent/references/conversation-memory.md) for complete examples and lifecycle semantics.
 
 ## Filtered similarity search
 
@@ -430,7 +442,7 @@ protected function preProcessors(): array
 {
     return [
         new QueryTransformationPreProcessor(
-            provider: $this->resolveProvider(),
+            provider: $this->getProvider(),
             transformation: QueryTransformationType::REWRITING,  // or DECOMPOSITION, HYDE
         ),
     ];
@@ -454,14 +466,13 @@ protected function postProcessors(): array
             topN: 3,
         ),
         // or: new JinaRerankerPostProcessor(key: ..., topN: 3)
-        // or: new LocalAIRerankerPostProcessor(...)
         new FixedThresholdPostProcessor(threshold: 0.5),        // drop low-score documents
         // or: new AdaptiveThresholdPostProcessor(multiplier: 0.6)  // statistics-based cutoff
     ];
 }
 ```
 
-Fluent equivalents: `setPreProcessors([...])`, `setPostProcessors([...])`.
+Fluent equivalents: `setPreProcessors([...])`, `setPostProcessors([...])`. Each call replaces the whole list and wins over the hook.
 
 ## Using the RAG
 
@@ -471,7 +482,7 @@ A `RAG` is an `Agent` — all verbs work, in every mode:
 use NeuronAI\Chat\Messages\Stream\Chunks\TextChunk;
 use NeuronAI\Chat\Messages\UserMessage;
 
-$rag = MyChatBot::make(threadId: $threadId);   // thread identity: same model as Agent
+$rag = MyChatBot::make(workflowId: $threadId);   // thread identity: same model as Agent
 
 // Chat (eager → AgentState)
 echo $rag->chat(new UserMessage('What are the main features?'))->getMessage()->getContent();
@@ -503,6 +514,7 @@ use NeuronAI\Testing\FakeEmbeddingsProvider;
 use NeuronAI\Testing\FakeVectorStore;
 
 $rag = MyChatBot::make()
+    ->setThreadId('test-thread')
     ->setEmbeddingsProvider(new FakeEmbeddingsProvider())
     ->setVectorStore(new FakeVectorStore([new Document('The product costs $99.')]));
 

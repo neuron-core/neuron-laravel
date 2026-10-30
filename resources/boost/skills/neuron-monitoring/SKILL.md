@@ -1,18 +1,16 @@
 ---
 name: neuron-monitoring
-description: Monitor Neuron AI agents and workflows with events observability, logging, and performance analysis. Use this skill whenever the user mentions debugging, monitoring, observability, performance analysis, tracing, connecting to the Neuron Cloud platform, or needs to understand why an agent is behaving a certain way. Also trigger for tasks involving agent execution timeline, tool call inspection, latency problems, or general troubleshooting of Neuron AI applications.
+description: Monitor Neuron AI agents and workflows with events observability, logging, and performance analysis. Use this skill whenever the user mentions debugging, monitoring, observability, performance analysis, tracing, or needs to understand why an agent is behaving a certain way. Also trigger for tasks involving agent execution timeline, tool call inspection, latency problems, or general troubleshooting of Neuron AI applications.
 ---
 
 # Neuron AI Monitoring
 
 This skill helps you debug and monitor Neuron AI applications using the
-framework's event-driven observability system — from local logging with
-`LogListener` up to production tracing on the **Neuron Cloud** platform
-(setup instructions at the bottom of this document).
+framework's event-driven observability system.
 
 The progression is always the same: components emit events → you subscribe
-listeners. A `LogListener` writing to stdout and the Neuron Cloud tracing
-listener are the same mechanism, differing only in where the events go.
+listeners. A `LogListener` writing to stdout and a custom tracing listener
+are the same mechanism, differing only in where the events go.
 
 ## Event System Observability
 
@@ -22,26 +20,34 @@ registered on the instance and observe every run of it.
 
 ### Event Emission
 
-All components emit event objects automatically. Every event class lives in
-`NeuronAI\Observability\Events` and extends
-`NeuronAI\Observability\ObservabilityEvent`:
+All components emit event objects automatically. Every event class extends
+`NeuronAI\Observability\ObservabilityEvent` and lives in the `Observability`
+namespace of the module that emits it:
 
 ```php
-// Lifecycle (emitted by the executor):
+// NeuronAI\Workflow\Observability — the lifecycle, emitted by the workflow engine:
 // WorkflowStart, WorkflowEnd, WorkflowNodeStart, WorkflowNodeEnd,
-// MiddlewareStart, MiddlewareEnd, BranchStart, BranchEnd,
-// WorkflowInterrupted (run paused for external input), AgentError (failure)
+// MiddlewareStart, MiddlewareEnd, BranchStart, BranchEnd, ChannelError,
+// WorkflowInterrupted (run paused for external input), WorkflowError (failure)
 //
-// Domain (emitted by nodes):
+// NeuronAI\Agent\Observability — emitted by agent nodes:
 // InferenceStart, InferenceStop, ToolCalling, ToolCalled,
-// MessageSaving, MessageSaved, Retrieving, Retrieved,
-// PreProcessing, PreProcessed, PostProcessing, PostProcessed,
-// SchemaGeneration, SchemaGenerated, Extracting, Extracted, ...
+// MessageSaving, MessageSaved, SchemaGeneration, SchemaGenerated,
+// Extracting, Extracted, Deserializing, Deserialized, Validating, Validated
+//
+// NeuronAI\RAG\Observability — emitted by RAG nodes:
+// Retrieving, Retrieved, PreProcessing, PreProcessed, PostProcessing, PostProcessed
 ```
 
 Each event carries its own data plus the emission context stamped by the
-framework: `->source` (the emitting component) and `->branchId` (the parallel
-branch, or null). `->name()` returns the string name ('inference-start').
+framework: `->source` (the emitting component), `->execution` (the run identity)
+and `->branchId` (the parallel branch, or null). `->name()` returns the string
+name ('inference-start') and `->toArray()` the event's own data.
+
+Every node and middleware start is followed by its end, whatever the outcome:
+`WorkflowNodeEnd` and `MiddlewareEnd` carry `->outcome`, a `NodeOutcome`
+(`Completed`, `Suspended` or `Failed`), so a span can be closed and marked as
+soon as its node ends.
 
 ### Subscribing Listeners
 
@@ -49,7 +55,7 @@ Listeners are class-keyed with instanceof matching — subscribe to a specific
 event class, or to `ObservabilityEvent::class` to receive everything:
 
 ```php
-use NeuronAI\Observability\Events\InferenceStop;
+use NeuronAI\Agent\Observability\InferenceStop;
 use NeuronAI\Observability\ObservabilityEvent;
 
 // React to one event type
@@ -67,7 +73,8 @@ $agent->subscribe(ObservabilityEvent::class, function (ObservabilityEvent $event
 ### Custom Events
 
 Emit your own events from nodes with `Node::emit()` — the event object is the
-payload. Subclass `ObservabilityEvent` to get `source`/`branchId` stamped:
+payload. Subclass `ObservabilityEvent` to get `source`/`branchId` stamped, and
+override `toArray()` so `LogListener` records the event's data:
 
 ```php
 use NeuronAI\Observability\ObservabilityEvent;
@@ -76,6 +83,11 @@ class DocumentScored extends ObservabilityEvent
 {
     public function __construct(public string $documentId, public float $score)
     {
+    }
+
+    public function toArray(): array
+    {
+        return ['document' => $this->documentId, 'score' => $this->score];
     }
 }
 
@@ -88,13 +100,18 @@ $workflow->subscribe(DocumentScored::class, fn (DocumentScored $e) => $metrics->
 
 ### Integrating a Host Framework
 
-Forward every event to an application-wide PSR-14 dispatcher (Symfony,
-Laravel's PSR bridge, League\Event) — Neuron events become regular application
+Forward every event to an application-wide PSR-14 dispatcher (Symfony's
+EventDispatcher, League\Event) — Neuron events become regular application
 events:
 
 ```php
 $agent->setEventDispatcher($appEventDispatcher);
 ```
+
+Laravel's dispatcher is not PSR-14: it needs a small adapter, shown in the
+**neuron-laravel-integration** skill. Framework dispatchers match listeners by
+exact class, so a listener on `ObservabilityEvent` never fires there; listen to
+concrete event classes, or use `subscribe(ObservabilityEvent::class, ...)`.
 
 ### Legacy Observers (deprecated)
 
@@ -110,7 +127,7 @@ observers to listeners registered via `subscribe()`.
 
 **Diagnosis Steps**:
 
-1. Check the run trace (Neuron Cloud timeline, or `LogListener` output) - are tool calls being made?
+1. Check the run trace (`LogListener` output) - are tool calls being made?
 2. Verify tool descriptions are clear and specific
 3. Check if tool properties are correctly defined
 4. Review agent instructions - are tools mentioned?
@@ -136,7 +153,7 @@ wait without execution does not emit another interruption.
 `submitApprovalDecisions($decisions)` and `submitToolResults($results)` stage input;
 the following `run()` or `events()` emits the normal execution lifecycle. Use the
 status on `WorkflowEnd::state` to distinguish `suspended`, `completed` and `failed`.
-An `AgentError` may report a listener error that the workflow isolated, so count
+A `WorkflowError` may report a listener error that the workflow isolated, so count
 failed runs from their terminal status rather than from error events alone.
 
 The default interruption and end logs include `workflowId`, `runId`,
@@ -174,7 +191,7 @@ $agent->parallelToolCalls(true);
 
 ### Slow or failing conversation memory
 
-Conversation retrieval uses RAG's `Retrieving` / `Retrieved` events. Observe `WorkflowNodeStart` / `WorkflowNodeEnd` for `ConversationIngestionNode` to measure optional ingestion. A failed step emits `AgentError`. These use the existing retrieval and workflow monitoring paths; there are no separate memory events.
+Conversation retrieval uses RAG's `Retrieving` / `Retrieved` events. Observe `WorkflowNodeStart` / `WorkflowNodeEnd` for `ConversationIngestionNode` to measure optional ingestion. A failed step emits `WorkflowError`. These use the existing retrieval and workflow monitoring paths; there are no separate memory events.
 
 ### Poor Response Quality
 
@@ -218,7 +235,7 @@ protected function instructions(): string
 
 **Diagnosis Steps**:
 
-1. **Check the run trace** - see error details (`AgentError` events carry the exception)
+1. **Check the run trace** - see error details (`WorkflowError` events carry the exception)
 2. **Verify tool configuration**:
    - Property types match
    - Required parameters provided
@@ -250,8 +267,8 @@ class MyTool extends Tool
 
 ### PSR-3 Logger Integration
 
-`LogListener` logs every event's name with per-event-class serialized context
-(override its protected `serialize*` methods to customize):
+`LogListener` logs every event's name with the event's `toArray()` as context
+(override its protected `context()` method to redact or enrich it):
 
 ```php
 use NeuronAI\Observability\LogListener;
@@ -299,7 +316,7 @@ class AgentTest extends TestCase
             new AssistantMessage('Helpful answer here')
         ));
 
-        $response = $agent->chat(
+        $response = $agent->setThreadId('test-thread')->chat(
             new UserMessage('Test question')
         )->getMessage();
 
@@ -323,16 +340,7 @@ public function testToolExecution(): void
 
 ## Production Error Analysis
 
-With the Neuron Cloud tracing listener attached (see the bottom of this
-document), a failed run ships a trace with terminal status `failed`, so the
-platform gives you:
-
-1. **Error Summary**: Frequency, severity, affected runs
-2. **Stack Traces**: Full call chain with framework code
-3. **Context**: Input data, state at time of error
-4. **Patterns**: Repeated issues, common failure modes
-
-Locally, subscribe to the `AgentError` event to capture failures as they happen.
+Subscribe to the `WorkflowError` event to capture failures as they happen.
 
 ### Tracing Node Execution
 
@@ -362,9 +370,8 @@ file_put_contents('workflow_diagram.mmd', $diagram);
 
 When troubleshooting:
 
-- [ ] Is an observability listener attached (`LogListener` locally, the Neuron Cloud listener in production)?
-- [ ] Can you see the run trace in the Neuron Cloud dashboard?
-- [ ] Are errors shown in the timeline?
+- [ ] Is an observability listener attached (`LogListener`, or your own)?
+- [ ] Are errors shown in the run trace?
 - [ ] What was the LLM prompt and response?
 - [ ] Were tools called, and what were the results?
 - [ ] Is the response quality poor or execution failing?
@@ -372,114 +379,3 @@ When troubleshooting:
 - [ ] Verify tool property types match what was sent
 - [ ] For RAG, check retrieved documents and scores
 - [ ] Consider subscribing a custom listener for specific events
-
-## Connecting to Neuron Cloud
-
-Neuron Cloud is the hosted observability platform for Neuron. Attach its
-tracing listener to a workflow or agent and every run ships a trace — node,
-inference, tool, RAG, and structured-output spans — stitched across the
-suspend/resume segments of a durable run into a single timeline.
-
-It plugs into the same event system documented above: the Cloud listener is a
-plain PSR-14 listener subscribed to `ObservabilityEvent::class`, exactly like
-`LogListener`. No agent code changes are required — only a `subscribe()` call.
-
-### Choosing the Package
-
-Suggest the package that matches the application environment you are working in:
-
-| Application environment | Package to install |
-|---|---|
-| Laravel (`laravel/framework` in composer.json, `artisan` file present) | `neuron-core/neuron-cloud-laravel` |
-| Symfony (`symfony/framework-bundle` in composer.json, `config/bundles.php` present) | `neuron-core/neuron-cloud-symfony` |
-| Any other PHP application | `neuron-core/cloud-sdk` (framework-agnostic) |
-
-All three are available on Packagist. The Laravel and Symfony packages wire
-the framework-agnostic SDK into the application container with config and env
-plumbing; the plain SDK is configured by hand.
-
-### Plain PHP: neuron-core/cloud-sdk
-
-```bash
-composer require neuron-core/cloud-sdk
-```
-
-Build the SDK entry point. Everything hangs off one configured root:
-
-```php
-use NeuronCore\Cloud\NeuronCloud;
-use NeuronCore\Cloud\Http\GuzzleTransport;
-
-$cloud = new NeuronCloud(
-    transport: GuzzleTransport::discover(),
-    platformUrl: 'https://cloud.neuron-ai.dev',
-    apiKey: $_ENV['NEURON_CLOUD_API_KEY'],
-    signingKey: $_ENV['NEURON_CLOUD_SIGNING_KEY'],
-);
-```
-
-### Laravel: neuron-core/neuron-cloud-laravel
-
-```bash
-composer require neuron-core/neuron-cloud-laravel
-php artisan vendor:publish --tag=neuron-cloud-config
-```
-
-The service provider is auto-discovered and registers `NeuronCloud` as a
-singleton, resolved from `config/neuron-cloud.php`:
-
-```bash
-# .env file
-NEURON_CLOUD_API_KEY=your_api_key
-NEURON_CLOUD_SIGNING_KEY=your_signing_key
-```
-
-Resolve the client anywhere with `app(NeuronCloud::class)` or constructor
-injection.
-
-### Symfony: neuron-core/neuron-cloud-symfony
-
-```bash
-composer require neuron-core/neuron-cloud-symfony
-```
-
-Register the bundle in `config/bundles.php`:
-
-```php
-return [
-    // ...
-    NeuronCore\Cloud\Symfony\NeuronCloudBundle::class => ['all' => true],
-];
-```
-
-Configure it:
-
-```yaml
-# config/packages/neuron_cloud.yaml
-neuron_cloud:
-    platform_url: '%env(NEURON_CLOUD_PLATFORM_URL)%'
-    api_key:      '%env(NEURON_CLOUD_API_KEY)%'
-    signing_key:  '%env(NEURON_CLOUD_SIGNING_KEY)%'
-```
-
-The bundle registers `NeuronCore\Cloud\NeuronCloud` as a service, available
-for autowiring.
-
-### Attaching the Tracing Listener
-
-However `$cloud` was obtained, connecting an agent or workflow is a single
-`subscribe()` — the same call used for `LogListener` above:
-
-```php
-use NeuronAI\Observability\ObservabilityEvent;
-
-$agent->subscribe(ObservabilityEvent::class, $cloud->listener('support-agent'));
-```
-
-One trace is flushed per run, carrying the run id and a terminal status
-(`completed`, `suspended`, `failed`). The listener resets itself after each
-flush, so one instance follows every run of the workflow it is attached to,
-including the resumes of a durable run.
-
-Listeners compose: attach both a `LogListener` for local visibility and the
-Cloud listener for the platform timeline on the same agent.

@@ -1,6 +1,6 @@
 ---
 name: neuron-evaluation
-description: Create and run AI evaluations with datasets, assertions, and output drivers in Neuron AI. Use this skill whenever the user mentions evaluation, testing AI systems, creating evaluators, dataset-driven testing, assertion-based validation, or wants to measure AI system performance. Also trigger for tasks involving evaluator discovery, output configuration, result analysis, building custom assertions, multi-turn conversation evaluation, agent trajectory testing, tool-call assertions, human-in-the-loop (approval flow) testing, simulated user conversations, or connecting an evaluation suite to the Neuron Cloud platform.
+description: Create and run AI evaluations with datasets, assertions, and output drivers in Neuron AI. Use this skill whenever the user mentions evaluation, testing AI systems, creating evaluators, dataset-driven testing, assertion-based validation, or wants to measure AI system performance. Also trigger for tasks involving evaluator discovery, output configuration, result analysis, building custom assertions, multi-turn conversation evaluation, agent trajectory testing, tool-call assertions, human-in-the-loop (approval flow) testing, or simulated user conversations.
 ---
 
 # Neuron AI Evaluation
@@ -41,6 +41,7 @@ use NeuronAI\Evaluation\Contracts\DatasetInterface;
 use NeuronAI\Evaluation\Assertions\StringContains;
 use NeuronAI\Evaluation\Dataset\ArrayDataset;
 use NeuronAI\Agent;
+use NeuronAI\UniqueIdGenerator;
 
 class ContainsEvaluator extends BaseEvaluator
 {
@@ -60,9 +61,11 @@ class ContainsEvaluator extends BaseEvaluator
 
     public function run(array $datasetItem): mixed
     {
-        $response = MyAgent::make()->chat(
-            new UserMessage($datasetItem['text'])
-        )->getMessage();
+        // A fresh thread per item, so no item sees another item's conversation
+        $response = MyAgent::make()
+            ->setThreadId(UniqueIdGenerator::generateId('eval_'))
+            ->chat(new UserMessage($datasetItem['text']))
+            ->getMessage();
 
         return $response->getContent();
     }
@@ -232,9 +235,78 @@ $this->assert(new AgentJudge(
 ), $output);
 ```
 
+#### ClassifierJudge
+Use a classifier for explicit yes/no criteria or ordered grading rubrics. It depends on
+`ClassifierInterface`, so it works with TypeSafeAI or another implementation without an
+Agent. Use `AgentJudge` when generated reasoning is needed; compare judge quality,
+latency, and cost on representative labeled outputs before choosing a default.
+
+```php
+use NeuronAI\Classifier\Boolean;
+use NeuronAI\Classifier\Score as ClassifierScore;
+use NeuronAI\Classifier\TypeSafeAI\TypeSafeAI;
+use NeuronAI\Evaluation\Assertions\ClassifierJudge;
+
+$classifier = new TypeSafeAI(key: $_ENV['TYPESAFE_API_KEY']);
+
+$this->assert(new ClassifierJudge(
+    classifier: $classifier,
+    criteria: new Boolean('Does actual directly answer the question in reference?'),
+    threshold: 0.9,
+    reference: $datasetItem['question'],
+), $output, 'relevance');
+
+$this->assert(new ClassifierJudge(
+    classifier: $classifier,
+    criteria: new ClassifierScore(
+        instructions: 'How correct is actual compared with the expected answer in reference?',
+        levels: ['Incorrect.', 'Partially correct.', 'Fully correct and complete.'],
+    ),
+    threshold: 0.8,
+    reference: $datasetItem['expected_answer'],
+), $output, 'correctness');
+```
+
+- `criteria` accepts `Boolean` or `Classifier\Score`, not a string or `Choice`.
+  Boolean records the probability of true; Score records the expected level position
+  divided by `count(levels) - 1`. Define levels from worst to best. A probability of
+  `0.8` does not mean 80% completeness, and a normalized score is not a probability.
+- Both pass when the value is **greater than or equal to** `threshold` (default `0.7`,
+  finite and in `[0, 1]`). Calibrate thresholds for the rubric and dataset; they do not
+  inherit the meaning of an AgentJudge threshold.
+- Accepts `string|Trajectory`; a trajectory uses its full `toTranscript()` rendering.
+  To judge only the final answer, pass `$trajectory->finalAnswer()`.
+- Each evaluation sends one question named `judgment`. Input contains `actual` and,
+  when supplied, `reference`. Use reference for the question, expected answer, or
+  supporting evidence, and explain its role in the criterion.
+- Assertion context contains `type`, `criteria`, `threshold`, `reference`,
+  `probabilities`, and Score `levels`. Messages describe the value and threshold,
+  without generated reasoning. The runner retains context for failed assertions;
+  passing score records retain only the metric label, value, and verdict.
+- Invalid input and provider failures propagate as evaluation errors, not failed
+  judgments. Separate assertions make separate classifier calls, including when
+  `--cache` reuses the output of `run()`.
+
+For tests without network access, inject `FakeClassifier`. Queue one answer map per
+call using the `judgment` identifier; Score answers require the full distribution:
+
+```php
+use NeuronAI\Testing\FakeClassifier;
+
+$classifier = new FakeClassifier([['judgment' => [0.0, 0.5, 0.5]]]);
+$judge = new ClassifierJudge(
+    classifier: $classifier,
+    criteria: new ClassifierScore('How complete is actual?', ['None.', 'Partial.', 'Full.']),
+    threshold: 0.75,
+);
+$result = $judge->evaluate('Some output'); // score = 0.75, passed = true
+$classifier->assertCallCount(1);
+```
+
 #### Pre-configured Judges
 
-Built-in judges for common evaluation scenarios:
+These judges extend `AgentJudge` and require an `AgentInterface`; use `ClassifierJudge`
+with an explicit definition for classifier-backed criteria:
 
 ```php
 use NeuronAI\Evaluation\Assertions\Judges\{FaithfulnessJudge, CorrectnessJudge, RelevanceJudge, HelpfulnessJudge};
@@ -528,15 +600,72 @@ vendor/bin/neuron evaluation --help
 ```
 
 **`--concurrency=N`** runs each evaluator's dataset items in N parallel processes.
-Requires the `pcntl` extension and `spatie/fork`; if unavailable, the runner prints a
+Requires the `pcntl` and `posix` extensions and `spatie/fork`; if unavailable, the runner prints a
 notice and falls back to sequential execution. The same option exists
 programmatically: `$runner->run($evaluator, concurrency: 4)`.
 
 **`--autoload-file=<path>`** (also `--autoload-file <path>`) loads a custom bootstrap
 file *before* (in addition to) the default Composer autoloader. It's a global
 `vendor/bin/neuron` option, so it works with any command. Use it when evaluators need
-framework bootstrapping (e.g. a Laravel/Symfony bootstrap that sets up the DI
-container) or an autoloader not covered by the project's `composer.json`.
+framework bootstrapping (e.g. a Laravel bootstrap that sets up the DI container) or an
+autoloader not covered by the project's `composer.json`. To build evaluators through that
+container, configure a resolver (next section). Symfony services are private, so a
+resolver cannot fetch evaluators from the compiled container: use the console command of
+the **neuron-symfony-integration** skill.
+
+### Container Integration
+
+Evaluators and output drivers listed as class names are built by a **resolver**: a
+`callable(class-string): object`. Without one they are instantiated with `new`, and a
+class whose constructor needs arguments fails with a message pointing to the resolver.
+Configure it in `evaluation.php`, once the `--autoload-file` bootstrap has booted the
+application:
+
+```php
+return [
+    // Delegate to the application's container, e.g. $container->get($class)
+    'resolver' => fn (string $class): object => app($class),
+];
+```
+
+Evaluators can then receive agents, repositories or clients through their constructor.
+Output drivers with dependencies can stay class names too: they are built after all runs
+complete, so their connections never exist when `--concurrency` forks.
+
+`--concurrency` runs each dataset item in a forked child process. Neuron's HTTP clients
+open their own connections there; the application's own connections (database, Redis)
+need the runner's **child hooks**, which run in each child around its item:
+
+```php
+use NeuronAI\Evaluation\Runner\EvaluatorRunner;
+
+return [
+    'runner' => new EvaluatorRunner(
+        beforeChild: fn () => ...,  // replace connections inherited from the parent
+        afterChild: fn () => ...,   // release what the child opened
+    ),
+];
+```
+
+A failing hook fails that dataset item. Keep inherited connection objects referenced and
+open new ones: closing an inherited connection in a child closes the parent's too.
+
+A framework console command passes the same collaborators to the command it wraps; they
+win over the `evaluation.php` entries, and `--cache`/`--fresh` apply to a copy of the
+runner (`$runner->withCache($cache, refresh: true)`):
+
+```php
+use NeuronAI\Console\Evaluation\EvaluationCommand;
+use NeuronAI\Evaluation\Runner\EvaluatorRunner;
+
+$exitCode = (new EvaluationCommand(
+    runner: new EvaluatorRunner(beforeChild: $reconnect),
+    resolver: fn (string $class): object => $container->get($class),
+))->run(['neuron', '--path=evaluations', '--concurrency=4']);
+```
+
+The complete Artisan and Symfony Console commands, with fork-safe database hooks, are in
+the **neuron-laravel-integration** and **neuron-symfony-integration** skills.
 
 ### Run Output Caching (`--cache`)
 
@@ -627,13 +756,13 @@ echo "Success Rate: {$results->getSuccessRate() * 100}%\n";
 
 Create `evaluation.php` in project root. Each `output` entry is either:
 
-- a **class string** of a zero-argument driver (resolved as `new $class()`), or
-- a **fully-constructed driver instance** (required for any driver that needs constructor arguments).
+- a **class string**, built by the resolver (see Container Integration; `new $class()`
+  without one), or
+- a **fully-constructed driver instance**.
 
-Drivers that need dependencies (a DB connection, an HTTP client, options like a
-file path) **must** be supplied as concrete instances. This is what lets a host
-framework (Laravel, Symfony) build them through its DI container — pass the
-resolved instance into the config.
+A driver that needs dependencies (a DB connection, an HTTP client) can stay a class
+string once a container-backed resolver is configured: it is built after all runs
+complete. A driver that needs options, like a file path, is passed as an instance.
 
 ```php
 <?php
@@ -715,11 +844,12 @@ class DatabaseOutput implements EvaluationOutputInterface
 }
 ```
 
-Register the constructed instance (resolve dependencies from your DI container):
+List the class and let the resolver build it with its dependencies, after all runs
+complete:
 ```php
 return [
     'output' => [
-        new DatabaseOutput($container->get(\PDO::class), 'evaluations'),
+        DatabaseOutput::class,
     ],
 ];
 ```
@@ -863,16 +993,12 @@ public function evaluate(mixed $output, array $datasetItem): void
 ```php
 class RAGEvaluator extends BaseEvaluator
 {
-    public function setUp(): void
-    {
-        $this->rag = new MyRAGAgent();
-    }
-
     public function run(array $datasetItem): mixed
     {
-        return $this->rag->chat(
-            new UserMessage($datasetItem['question'])
-        )->getMessage()->getContent();
+        return MyRAGAgent::make()
+            ->setThreadId(UniqueIdGenerator::generateId('eval_'))
+            ->chat(new UserMessage($datasetItem['question']))
+            ->getMessage()->getContent();
     }
 
     public function evaluate(mixed $output, array $datasetItem): void
@@ -890,17 +1016,11 @@ class RAGEvaluator extends BaseEvaluator
 ### Comparing Multiple Agents
 
 ```php
-public function setUp(): void
-{
-    $this->agentA = new AgentOne();
-    $this->agentB = new AgentTwo();
-}
-
 public function run(array $datasetItem): mixed
 {
     return [
-        'agent_a' => $this->agentA->chat(...)->getContent(),
-        'agent_b' => $this->agentB->chat(...)->getContent(),
+        'agent_a' => AgentOne::make()->setThreadId(UniqueIdGenerator::generateId('eval_'))->chat(...)->getContent(),
+        'agent_b' => AgentTwo::make()->setThreadId(UniqueIdGenerator::generateId('eval_'))->chat(...)->getContent(),
     ];
 }
 
@@ -946,7 +1066,7 @@ public function evaluate(mixed $output, array $datasetItem): void
 ## CLI Generation
 
 ```bash
-vendor/bin/neuron make:evaluators MyEvaluator
+vendor/bin/neuron make:evaluators 'App\Evaluators\MyEvaluator'
 ```
 
 ## Testing Evaluators
@@ -1031,6 +1151,8 @@ When helping users with evaluations:
     - Pattern matching → `MatchesRegex`
     - Semantic similarity → `StringSimilarity` (embeddings)
     - Fuzzy matching → `StringDistance`
+    - Boolean criteria or ordered quality rubrics → `ClassifierJudge`
+    - Custom quality criteria with generated reasoning → `AgentJudge`
     - Tool calls / HITL / call sequences → trajectory assertions (`ToolWasCalled`,
       `TrajectoryMatches`, `ToolWasApproved`/`ToolWasRejected`) on a `Trajectory`
     - Whole-conversation quality → `TaskCompletionJudge` (and other judges) on a `Trajectory`
@@ -1044,84 +1166,3 @@ When helping users with evaluations:
     - Unit tests → Single assertion per evaluator
     - Integration tests → Multiple assertions
     - System tests → Multiple evaluators covering different scenarios
-
-## Connecting to Neuron Cloud (Optional)
-
-**This integration is completely optional.** Everything documented above runs
-entirely locally — datasets from arrays or JSON files, results to console or
-JSON. Only suggest Neuron Cloud when the user explicitly asks to connect their
-evaluation suite to the platform (hosted datasets, cross-run aggregation,
-sharing results with a team). Never treat it as a required setup step.
-
-Neuron Cloud adds two things to an evaluation suite:
-
-1. **Hosted datasets** — dataset items managed on the platform, consumed by
-   evaluators like any other `DatasetInterface`.
-2. **Hosted results** — evaluation runs (summary, per-item results, labeled
-   scores, failures, multi-turn trajectories) shipped to the platform for
-   cross-run aggregation and comparison over time.
-
-### Installation
-
-The SDK is available on Packagist:
-
-```bash
-composer require neuron-core/cloud-sdk
-```
-
-Laravel and Symfony applications can use `neuron-core/neuron-cloud-laravel` or
-`neuron-core/neuron-cloud-symfony` instead, which register the configured SDK
-root in the framework container — see the **neuron-monitoring** skill for the
-per-framework setup details.
-
-### Setup
-
-Everything hangs off one configured root:
-
-```php
-use NeuronCore\Cloud\NeuronCloud;
-use NeuronCore\Cloud\Http\GuzzleTransport;
-
-$cloud = new NeuronCloud(
-    transport: GuzzleTransport::discover(),
-    platformUrl: 'https://cloud.neuron-ai.dev',
-    apiKey: $_ENV['NEURON_CLOUD_API_KEY'],
-    signingKey: $_ENV['NEURON_CLOUD_SIGNING_KEY'],
-);
-```
-
-### Using a Platform Dataset
-
-`$cloud->dataset(slug)` returns a regular `DatasetInterface` — return it from
-`getDataset()` in place of an `ArrayDataset` or `JsonDataset`:
-
-```php
-public function getDataset(): DatasetInterface
-{
-    return $cloud->dataset('customer-support-eval');
-}
-```
-
-### Shipping Results to the Platform
-
-`$cloud->evaluationOutput()` builds an output driver for the platform's
-evaluation endpoint. Register it as a **constructed instance** in
-`evaluation.php` (it needs the platform credentials, so it cannot be listed as
-a class string):
-
-```php
-return [
-    'output' => [
-        ConsoleOutput::class,
-        $cloud->evaluationOutput(
-            'SupportEvaluator',                 // run name shown on the platform
-            dataset: 'customer-support-eval',   // optional: link to a platform dataset
-            environment: 'ci',                  // optional: label the environment
-        ),
-    ],
-];
-```
-
-It composes with the local drivers — keep `ConsoleOutput` alongside it. A
-failed upload is logged and never crashes the evaluation run, and `Trajectory`
-outputs are serialized as transcripts with tool calls and token usage.

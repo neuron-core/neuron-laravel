@@ -82,7 +82,7 @@ class DemoVoiceAgent extends SpeechAgent
     }
 }
 
-$agent = DemoVoiceAgent::make();
+$agent = DemoVoiceAgent::make()->setThreadId('demo');
 $state = $agent->chat(new UserMessage('Say hello.'));
 
 if ($state->getStatus() === WorkflowStatus::Completed) {
@@ -102,7 +102,7 @@ Replace the fake provider hooks with application-configured implementations for 
 - **Treat artifacts as run results.** Read audio only after successful completion. The example clears it when the output step runs, including when the response has no text. If a reused Agent must expose empty artifact keys even during a new turn's earlier suspension, clear those keys in the new turn's entry node too; generic state keys are not automatically reset.
 - **Keep external calls durable.** Providers remain live dependencies on nodes rebuilt per segment. `memoize()` reuses a committed synthesis result after replay; it cannot prevent a repeat if an external call succeeds but its memo never commits.
 - **Resume the same turn after output failure.** Reconstruct the same persistence, history, and dependencies, then call `run()` or `events()`. Completed inference steps are reused. Calling `chat()` starts a new turn instead. History may already contain the final text while synthesis is failed or incomplete.
-- **Keep return contracts explicit.** `chat()` returns `AgentState`; `stream()` yields the original live output and returns state when exhausted. This serial example starts synthesis after final inference, without overlapping audio and text streams. `structured()` still returns the typed object; the example would speak its raw JSON, with audio available through `getState()`. Provide an explicit narration mapping if needed.
+- **Keep return contracts explicit.** `chat()` returns `AgentState`; `stream()` yields the original live output and returns state when exhausted. This serial example starts synthesis after final inference, without overlapping audio and text streams. `structured()` still returns the typed object; the example would speak its raw JSON, with audio available on the state returned by `run($request)`. Provide an explicit narration mapping if needed.
 - **Keep graph export accurate.** This node's `__invoke()` declares its outgoing `StopEvent`. Generator-only nodes can implement `NeuronAI\Workflow\Exporter\DescibeExporterTransitions` to describe their final routing events.
 
 ## Adding speech input
@@ -113,4 +113,4 @@ An input stage follows the complementary pattern:
 2. Return the transcribing node alongside `parent::entryNodes()`. Its `__invoke()` accepts the application event and returns the original `AgentStartEvent` with transcribed `UserMessage` content and preserved options.
 3. Memoize the speech call, preserve caller messages rather than mutating them, and leave `AgentStartNode` to initialize `AgentState::$request` and reset tool-run counters. Clear per-turn output artifacts in this entry node if required.
 
-An arbitrary Workflow start event without the `AgentStartEvent` contract is not interchangeable here. Also respect the speech provider's audio input contract: the current OpenAI transcription implementation opens the audio content as a file path; a base64 audio block cannot simply be passed as that path.
+An arbitrary Workflow start event without the `AgentStartEvent` contract is not interchangeable here. Also respect the speech provider's audio input contract: the OpenAI and ElevenLabs transcription providers take a file path, or base64 audio with a media type (such as `audio/wav`) from which the upload is named.

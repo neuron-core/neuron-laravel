@@ -1,6 +1,6 @@
 ---
 name: neuron-streaming
-description: Stream Neuron AI agent and workflow output to a consumer — iterating native chunks, yielding portable progress events from nodes, attaching a stream adapter for a UI protocol (Vercel AI SDK, AG-UI, SSE) or for Neuron's native vocabulary, and pushing output through a streaming channel when the consumer is not the HTTP response (queue worker, websocket, resumed run). Use this skill whenever the user mentions streaming, stream chunks, TextChunk, real-time responses, SSE, server-sent events, useChat, Vercel AI SDK, AG-UI, CopilotKit, stream adapters, streaming channels, pushing output to a websocket or Redis/Pusher, progress events from a workflow node, or testing streamed output. Also trigger for any task involving setStreamAdapter, setChannel, StreamAdapterInterface, NativeAdapter, StreamingChannelInterface, AbstractChannel, CallbackChannel, RedisChannel, PusherChannel, FakeChannel, ProtocolEvent, SSEEncoder, ActivityStreamEvent, StepStartedStreamEvent, or CustomStreamEvent.
+description: Stream Neuron AI agent and workflow output to a consumer — iterating native chunks, yielding portable progress events from nodes, attaching a stream adapter for a UI protocol (Vercel AI SDK, AG-UI, SSE) or for Neuron's native vocabulary, and pushing output through a streaming channel when the consumer is not the HTTP response (queue worker, websocket, resumed run). Use this skill whenever the user mentions streaming, stream chunks, TextChunk, real-time responses, SSE, server-sent events, useChat, Vercel AI SDK, AG-UI, CopilotKit, stream adapters, streaming channels, pushing output to a websocket, Redis, Pusher or a Mercure hub, progress events from a workflow node, or testing streamed output. Also trigger for any task involving setStreamAdapter, setChannel, StreamAdapterInterface, NativeAdapter, StreamingChannelInterface, AbstractChannel, CallbackChannel, RedisChannel, PusherChannel, MercureChannel, FakeChannel, ProtocolEvent, SSEEncoder, ActivityStreamEvent, StepStartedStreamEvent, or CustomStreamEvent.
 ---
 
 # Neuron AI Streaming
@@ -18,13 +18,33 @@ A Workflow segment produces a sequence of live objects while it runs. Four indep
 | **Destination** | Where does it go? | Pull iteration over the generator, or eager delivery through `StreamingChannelInterface` via `setChannel()` |
 | **Encoding** | How does it become bytes? | `SSEEncoder` on the HTTP edge; a channel encodes for its own transport |
 
-Adapter and channel compose. The adapter decides the shape, the channel the destination. The Workflow converts each item once into a `ProtocolEvent`. With both an adapter and channel configured, it consumes the pipeline eagerly and delivers events to the channel; otherwise the caller consumes a lazy generator. It never frames bytes: the edge that owns the transport encodes it.
+Adapter and channel compose. The adapter decides the shape, the channel the destination. The Workflow converts each item once into a `ProtocolEvent`. `run()` consumes the pipeline eagerly; `events()` and `Agent::stream()` always return lazy generators. Consumption also delivers adapted events to a configured channel. It never frames bytes: the edge that owns the transport encodes it.
 
 Live output is **ephemeral**. Nothing yielded during a segment is stored in persistence or replayed when a completed step is restored. Chat history is the record the UI reconciles from. Never make correctness depend on a client receiving a streamed item.
 
+## Resources constructed per segment
+
+Use the `streamAdapter()` and `channel()` hooks, or pass a factory to
+`setStreamAdapter()` / `setChannel()`; the setters take factories only:
+
+```php
+$agent->setStreamAdapter(fn () => new AGUIAdapter($input['threadId'], $input['runId'] ?? null));
+$state = $agent->run($request);
+```
+
+These factories run only for an owned execution and return a new adapter or channel
+for each segment: both hold the state of one segment's stream. There is no Workflow-mutating preparation callback; saved outcomes and idle
+polls skip resource construction. The AG-UI run ID is the client's per-request ID from
+its input, not Neuron's durable run ID. Lazy calls capture input at creation and
+execute during iteration. Setters configure the definition; an active execution keeps
+its already resolved resources and graph. This rule applies to Workflow, Agent and RAG
+configuration.
+
 ## Pull Streaming: Native Chunks
 
-`Agent::stream()` and `Workflow::events()` return a lazy `Generator` unless both an adapter and channel are configured. Iterate that generator for live output, then read the final state from `getReturn()`. With adapter + channel, they stream eagerly to the channel and return the final `AgentState` or `WorkflowState` directly.
+`Agent::stream()` and `Workflow::events()` always return a lazy `Generator`.
+Iterate it for output, then read state from `getReturn()`. For eager channel delivery,
+use `chat($messages, stream: true)`.
 
 ```php
 use NeuronAI\Chat\Messages\Stream\Chunks\TextChunk;
@@ -101,7 +121,7 @@ An adapter turns each live object into zero or more `ProtocolEvent`s: small valu
 
 The two UI protocol adapters expose `getHeaders()` with the HTTP response headers their protocol requires; the native vocabulary requires none. Framing is not the adapter's job: `SSEEncoder::encode($generator)` turns the events into `data:` lines on the HTTP edge and forwards the generator's return value, so the final state is still reachable after streaming. `SSEEncoder::frame($event)` frames a single event.
 
-**Laravel endpoint:** This pull-stream example assumes `MyAgent` has no configured channel, including through its `channel()` hook. `SSEEncoder::encode()` takes a generator; a complete adapter + channel pipeline returns a state instead.
+**Laravel endpoint:** This pull-stream example assumes `MyAgent` has no configured channel, including through its `channel()` hook. `SSEEncoder::encode()` takes a generator; the generator can also deliver to a configured channel during iteration.
 
 ```php
 use NeuronAI\Agent\Adapters\VercelAIAdapter;
@@ -111,21 +131,21 @@ use NeuronAI\Workflow\Streaming\SSEEncoder;
 Route::post('/chat', function (Request $request) {
     $adapter = new VercelAIAdapter();
 
-    $stream = MyAgent::make(threadId: $request->input('threadId'))
-        ->setStreamAdapter($adapter)
+    // The request runs one segment, so it builds its adapter once and keeps it for the headers.
+    $stream = MyAgent::make(workflowId: $request->input('threadId'))
+        ->setStreamAdapter(fn (): VercelAIAdapter => $adapter)
         ->stream(new UserMessage($request->input('message')));
 
+    // A generator callback: Laravel echoes and flushes every frame.
     return response()->stream(function () use ($stream) {
-        foreach (SSEEncoder::encode($stream) as $line) {
-            echo $line;
-            ob_flush();
-            flush();
-        }
+        yield from SSEEncoder::encode($stream);
     }, 200, $adapter->getHeaders());
 });
 ```
 
-An adapter is stateful for one stream. Create a new instance per request and never share one between concurrent streams. The Workflow calls `reset()` before every segment, so the same instance can also serve a suspension and its continuation in one process, as a queue worker does.
+A complete Laravel or Symfony endpoint (thread authorization, errors mapped to statuses before the first frame, the failure frame after it) is in the **neuron-laravel-integration** and **neuron-symfony-integration** skills.
+
+An adapter holds the state of one segment's stream. The factory runs for every segment, so a suspension and its continuation in one process, as a queue worker runs them, each get their own adapter. Seed a continuation's adapter with what the client already holds: the AG-UI `messages`, the Vercel message and its `parts`.
 
 ### Terminal frames
 
@@ -137,7 +157,7 @@ The Workflow selects the terminal from the segment's outcome, so application cod
 | Suspended | `interrupt($request)` | The current `InterruptRequest` the run waits for |
 | Failed | `error($e)` | A neutral failure text (override the adapter's protected `errorMessage()` to expose more), then the exception is rethrown to the caller |
 
-With `AGUIAdapter` a suspended stream ends with `RUN_FINISHED` whose `outcome` lists the pending interrupts; with `VercelAIAdapter` it ends with a `tool-approval-request` part per pending call; with `NativeAdapter` it ends with one `interrupt` event carrying the serialized request. Continue native approvals with `$agent->submitApprovalDecisions($decisions)->events()` and deferred tool results with `$agent->submitToolResults($results)->events()`. Both maps use tool call IDs; a result entry contains exactly one `result` value or `error` string. Raw AG-UI and Vercel envelopes still use their protocol translators through `submitInputs()`. See **neuron-tool-approval** and **neuron-frontend-integration** for the inbound round trip.
+With `AGUIAdapter` a suspended stream ends with `RUN_FINISHED` whose `outcome` lists the pending interrupts; with `VercelAIAdapter` it ends with a `tool-approval-request` part per pending call; with `AgentChunkAdapter` it ends with one `interrupt` event carrying the serialized request. Continue native approvals with `$agent->submitApprovalDecisions($decisions)->events()` and deferred tool results with `$agent->submitToolResults($results)->events()`. Both maps use tool call IDs; a result entry contains exactly one `result` value or `error` string. Raw AG-UI and Vercel envelopes still use their protocol translators through `submitInputs()`. See **neuron-tool-approval** and **neuron-frontend-integration** for the inbound round trip.
 
 ### Mapping domain events
 
@@ -170,7 +190,7 @@ Vercel parts are transient, so intermediate information reaches the UI without e
 
 ### Native vocabulary
 
-`NativeAdapter` is stateless and one-to-one: each yielded object becomes one event named after its kind, there are no start or end frames, and unknown objects are ignored. A chunk's payload is its own `toArray()`, so it always includes `messageId` (`null` on tool call and result chunks).
+`AgentChunkAdapter` is stateless and one-to-one: each yielded object becomes one event named after its kind, there are no start or end frames, and unknown objects are ignored. A chunk's payload is its own `toArray()`, so it always includes `messageId`: the ID of the message the chunk belongs to, the `ToolCallMessage` for a tool call chunk, and `null` on tool result chunks.
 
 | Yielded object | Event `type` | `data` |
 |---|---|---|
@@ -187,19 +207,24 @@ Vercel parts are transient, so intermediate information reaches the UI without e
 
 ### Custom adapters
 
-Implement `StreamAdapterInterface`: `reset()` opens a segment by dropping the previous segment's stream state, and `start()`, `transform(object)`, `end()`, `interrupt(InterruptRequest)`, `error(Throwable)` each return an iterable of `ProtocolEvent`s. Generate ids with `UniqueIdGenerator::generateId('msg_')` and expose the HTTP headers the protocol needs from the adapter itself. Return an empty iterable from `interrupt()` or `error()` when the protocol cannot express that outcome. Add `MapsStreamEvents` and implement `CustomizableStreamAdapterInterface` to support `mapEvent()`.
+Implement `StreamAdapterInterface`: `start()`, `transform(object)`, `end()`, `interrupt(InterruptRequest)`, `error(Throwable)` each return an iterable of `ProtocolEvent`s, and an instance serves one segment. Generate ids with `UniqueIdGenerator::generateId('msg_')` and expose the HTTP headers the protocol needs from the adapter itself. Return an empty iterable from `interrupt()` or `error()` when the protocol cannot express that outcome. Add `MapsStreamEvents` and implement `CustomizableStreamAdapterInterface` to support `mapEvent()`.
 
 ## Streaming Channels: Push Delivery
 
 Pull iteration only works when the code driving the generator is also the consumer, typically an HTTP response. Often it is not:
 
-- A queue worker runs the agent and the browser is connected to a websocket or a Redis/Pusher stream.
+- A queue worker runs the agent and the browser is connected to a websocket, a Redis or Pusher stream, or a Mercure hub.
 - A run is resumed after an approval from a different process than the one the client is watching.
 - The application calls `run()` or `chat()` and still wants live output somewhere.
 
-A channel solves this. Attach one with `setChannel()` and configure an adapter: `events()` and `stream()` consume the pipeline internally, deliver events as execution progresses, and return the final state. These calls are synchronous and return on completion or interruption. Without both components they return a lazy generator. `run()`, `chat()` and `structured()` always execute eagerly.
+Attach a channel with `setChannel()` and an adapter with `setStreamAdapter()`.
+`run($request)` consumes execution, delivers protocol events synchronously, and
+returns state. `events($request)` and `stream($messages)` always return lazy generators;
+iteration sends events to the channel and yields them to the caller. Components
+supplied through the protected hooks obey the same rules.
 
-The same rule applies to components supplied by the protected `streamAdapter()` and `channel()` hooks, and to continuations through `resume()->events()`, `signal()->events()`, or `submitInputs()->events()`. With the pipeline in place, call `stream()` or `events()` directly: no empty `foreach`, `iterator_to_array()`, or `getReturn()` is needed. The returned state exposes completion or interruption; execution failures still throw from the call.
+Call `chat($messages, stream: true)` when an eager worker needs provider chunks:
+the provider streams its answer to the channel, and `chat()` still returns state.
 
 ```php
 namespace NeuronAI\Workflow\Streaming\Channel;
@@ -220,9 +245,9 @@ A channel speaks the adapter's protocol, so content delivery needs an adapter:
 | No | No | Lazy generator of native objects |
 | Yes | No | Lazy generator of `ProtocolEvent`s |
 | No | Yes | Lazy generator of native objects; channel receives lifecycle during iteration |
-| Yes | Yes | Final state; protocol events are delivered eagerly through `send()` |
+| Yes | Yes | Lazy generator; iteration delivers protocol events through `send()` |
 
-The channel encodes for its own transport. Native objects never reach it: a push destination is another system and needs a wire vocabulary, which is exactly what the adapter provides. When the consumer speaks no UI protocol, attach `NativeAdapter`: it is that vocabulary for Neuron's own chunks and events.
+The channel encodes for its own transport. Native objects never reach it: a push destination is another system and needs a wire vocabulary, which is exactly what the adapter provides. When the consumer speaks no UI protocol, attach `AgentChunkAdapter`: it is that vocabulary for Neuron's own chunks and events.
 
 The lifecycle methods fire once per segment after the adapter's terminal frames. `interrupted()` receives a clone of the state so the channel can inspect the pending interrupts. The channel receives lifecycle calls even when nothing was streamed, so a zero-item run still reports completion.
 
@@ -236,24 +261,24 @@ use NeuronAI\Workflow\Streaming\Channel\CallbackChannel;
 use NeuronAI\Workflow\Streaming\ProtocolEvent;
 
 // Inside a queued job: the HTTP request already returned.
-$agent = MyAgent::make(threadId: $threadId)
-    ->setStreamAdapter(new VercelAIAdapter())
-    ->setChannel(new CallbackChannel(
+$agent = MyAgent::make(workflowId: $threadId)
+    ->setStreamAdapter(fn (): VercelAIAdapter => new VercelAIAdapter())
+    ->setChannel(fn (): CallbackChannel => new CallbackChannel(
         onSend: fn (ProtocolEvent $event) => Broadcast::private("chat.{$threadId}")
             ->as($event->type)
             ->with($event->data)
             ->sendNow(),
     ));
 
-$state = $agent->stream(new UserMessage($message));
+$state = $agent->chat(new UserMessage($message), stream: true);
 ```
 
-Use `stream()` for provider chunks. `chat()` uses buffered model inference; attaching an adapter and channel does not change that inference mode.
+Without `stream: true`, `chat()` uses buffered model inference; attaching an adapter and channel does not change that inference mode.
 
 For a dedicated transport extend `AbstractChannel` (see *Writing a channel* below). Declare a channel once on the class by overriding the protected `channel()` hook, the same way `streamAdapter()` declares a default adapter. Declare both: a `channel()` hook alone delivers only the lifecycle.
 
 ```php
-use NeuronAI\Agent\Adapters\NativeAdapter;
+use NeuronAI\Agent\Adapters\AgentChunkAdapter;
 use NeuronAI\Workflow\Streaming\Adapter\StreamAdapterInterface;
 use NeuronAI\Workflow\Streaming\Channel\CallbackChannel;
 use NeuronAI\Workflow\Streaming\Channel\StreamingChannelInterface;
@@ -263,7 +288,7 @@ class MyAgent extends Agent
 {
     protected function streamAdapter(): ?StreamAdapterInterface
     {
-        return new NativeAdapter();
+        return new AgentChunkAdapter();
     }
 
     protected function channel(): ?StreamingChannelInterface
@@ -285,14 +310,34 @@ class MyAgent extends Agent
 ```php
 use NeuronAI\Workflow\Streaming\Channel\RedisChannel;
 
-$agent = MyAgent::make(threadId: $threadId)
-    ->setStreamAdapter(new VercelAIAdapter())
-    ->setChannel(new RedisChannel($redis, "chat:{$threadId}"));
+$agent = MyAgent::make(workflowId: $threadId)
+    ->setStreamAdapter(fn (): VercelAIAdapter => new VercelAIAdapter())
+    ->setChannel(fn (): RedisChannel => new RedisChannel($redis, "chat:{$threadId}"));
 
-$state = $agent->stream(new UserMessage($message));
+$state = $agent->chat(new UserMessage($message), stream: true);
 ```
 
 Every message is a JSON envelope `{streamId, sequence, type, data}`. Unwrap it before passing the protocol event to an SSE encoder; forwarding the envelope directly is not the UI protocol. The Redis client must be connected and outside a transaction or pipeline. A publish result of zero subscribers is valid; Pub/Sub does not replay missed messages. Read [Channel wire contract and consumers](references/channels.md) when wiring subscribers, reassembly, or gap recovery.
+
+**One SSE response for a queued run.** When a worker runs the turn and the client needs a single SSE response (the AG-UI `HttpAgent`, Vercel `useChat`), name the channel after a run ID the endpoint mints, give the worker's channel `awaitListener`, and relay it in the endpoint with `RedisChannelReader`:
+
+```php
+use NeuronAI\Workflow\Streaming\Channel\RedisChannelReader;
+
+// Worker: the first publish waits up to 5 seconds for the endpoint to subscribe.
+->setChannel(fn (): RedisChannel => new RedisChannel($redis, "agent-run.{$runId}", awaitListener: 5))
+
+// Endpoint, after dispatching the job, inside the streamed response:
+(new RedisChannelReader($redis, "agent-run.{$runId}"))->listen(function (ProtocolEvent $event): void {
+    echo SSEEncoder::frame($event);
+    if (ob_get_level() > 0) {
+        ob_flush();
+    }
+    flush();
+});
+```
+
+`listen()` passes the protocol events of the channel's first segment to the callback and returns at its terminal event. It throws `ChannelReadException` when nothing arrives within its timeout (300 seconds by default: pass `timeout:` above the longest silent step), when the segment started before it subscribed, or when another segment starts before the first one ends (a redelivered job recovering the run): answer with the adapter's `error()` frames. It handles the client's key prefix, sets its own read timeout and closes the connection when it returns; phpredis reconnects on the next command. `awaitListener` defaults to 0 because the wait counts only subscribers of that exact channel: a pattern subscriber or a page that is not listening would delay every segment.
 
 ### PusherChannel
 
@@ -314,14 +359,14 @@ $pusher = new Pusher(
 );
 
 // Inside a queued job: the HTTP request already returned.
-$agent = MyAgent::make(threadId: $threadId)
-    ->setStreamAdapter(new VercelAIAdapter())
-    ->setChannel(new PusherChannel(
+$agent = MyAgent::make(workflowId: $threadId)
+    ->setStreamAdapter(fn (): VercelAIAdapter => new VercelAIAdapter())
+    ->setChannel(fn (): PusherChannel => new PusherChannel(
         client: $pusher,
         channel: "private-encrypted-chat.{$threadId}",
     ));
 
-$state = $agent->stream(new UserMessage($message));
+$state = $agent->chat(new UserMessage($message), stream: true);
 ```
 
 Each protocol event becomes a Pusher event named by its `type`, carrying the same `{streamId, sequence, type, data}` envelope as Redis. The three lifecycle events carry only `workflowId` in `data`; exception details and workflow state are not exposed.
@@ -332,6 +377,41 @@ Pusher keeps `batchSize: 10` by default, with an independent 10,000-byte event-d
 
 Use Pusher SDK 7.2.4 or later; earlier releases do not propagate the SDK timeout to HTTP requests. Neuron does not mutate the injected Pusher client or configure its timeouts. Set the SDK's `timeout` option explicitly (five seconds in the example); the SDK passes this timeout per request even when a custom Guzzle client is injected. Configure `connect_timeout` on that Guzzle client if needed.
 
+### MercureChannel
+
+`MercureChannel` publishes the segment to a [Mercure](https://mercure.rocks) hub, where a browser subscribes with a plain `EventSource`. It accepts an application-configured `Symfony\Component\Mercure\HubInterface` from the optional `symfony/mercure` package (`composer require symfony/mercure:^0.8`, the release that speaks the Mercure 1.0 protocol this channel is tested against). The hub object owns the publisher token and the HTTP delivery: it is the service the Symfony Mercure bundle autowires, and `Broadcast::connection('mercure')->getHub()` in a Laravel application that uses the Mercure broadcaster.
+
+```php
+use NeuronAI\Workflow\Streaming\Channel\MercureChannel;
+
+// Inside a queued job: the HTTP request already returned.
+$agent = MyAgent::make(workflowId: $threadId)
+    ->setStreamAdapter(fn (): VercelAIAdapter => new VercelAIAdapter())
+    ->setChannel(fn (): MercureChannel => new MercureChannel($hub, "https://example.com/threads/{$threadId}"));
+
+$state = $agent->chat(new UserMessage($message), stream: true);
+```
+
+The `data` of every update is a JSON array of envelopes, the same `{streamId, sequence, type, data}` as Redis and Pusher, sent without an SSE event type. Updates are private by default: the hub delivers them only to subscribers whose token grants `subscribe` on the topic, and the topic name protects nothing by itself. The application mints that token, after authorizing the thread. Pass `private: false` only for a hub that serves anonymous subscribers.
+
+A hub limits the size of a publish request, and a managed one (Mercure Cloud) also the requests it accepts per second. State both limits:
+
+```php
+// A plan of 4 requests per second and 512KB per message, shared by four concurrent runs.
+new MercureChannel($hub, $topic, maxRequestBytes: 512_000, maxRequestsPerSecond: 1.0);
+```
+
+- `maxRequestBytes` is the form-encoded request the hub receives: its `max_request_body_size`, 1 MiB by default, which is this parameter's default (`15KB` is exactly 15,000 bytes). Form encoding makes an envelope about 1.5 times its JSON size: a text delta takes about 220 bytes, so 15,000 bytes carry about 65 of them. A larger event is fragmented, one fragment per request.
+- `maxRequestsPerSecond` is the share of the hub's publish rate this run may use, null by default. The cap belongs to the hub, so every concurrent run and anything else the application publishes share it: divide the plan's rate by the runs that stream at the same time. The first event leaves at once; afterwards, what the segment produces while the slot is closed leaves in one update when it opens. With null every event is published as it is produced, which suits a hub without a rate limit.
+
+A paced channel waits for its slot when an update is full and at the end of the segment, and sends an update the hub refuses with 429 again after its `Retry-After` (one second when the header is missing). Waiting freezes the run, so it is bounded: once the hub would hold the run for more than ten seconds it has not worked off, the channel throws, the stream stops for that segment like any transport failure, and the run goes on. On a limit of 15,000 bytes and one request per second that is a single event of about 100 KB. A rate below three requests every ten seconds is refused when the channel is built: the end of a segment can need three requests in a row.
+
+PHP has no timer, so a partial update leaves only with the next event or at the end of the segment. The events produced just before a silent step, such as a tool executing, arrive when it ends, and so does the last fragment of a large event. Keep `maxRequestsPerSecond` null where the hub allows it.
+
+A publish blocks the run until the hub answers: configure timeouts on the HTTP client the hub was built with. Failures other than a 429 are not retried.
+
+In the browser, `subscribeToMercure` from `@neuron-core/streaming` takes the `EventSource`, unwraps every update and delivers its events one at a time. Read [Channel wire contract and consumers](references/channels.md) for it, and for driving the AG-UI client or `useChat` from a channel.
+
 ### Writing and consuming a channel
 
 Extend `AbstractChannel` for a transport with the shared wire contract; `CallbackChannel` remains a direct lifecycle callback adapter, and an `onSend` callback alone receives no lifecycle notifications. The base class serializes each payload once, splits oversized events incrementally, batches encoded bytes, and enforces event and delivery limits. Implement `deliver(string $batch)`; only override the encoding/limit hooks your transport needs.
@@ -340,7 +420,7 @@ Read [Channel wire contract and consumers](references/channels.md) for the exact
 
 ### Failure policy
 
-A channel error never fails the workflow. Workflow dispatches `ChannelError` with the exception. After the first transport delivery failure, `AbstractChannel` stops ordinary delivery for that segment; it does not retry uncertain batches. At termination it attempts pending data, then separately attempts the terminal notification even if that flush failed. Terminal delivery is not retried. Segment state is cleared even when termination fails, so sequential reuse starts with a fresh stream ID. Never share an instance between concurrent segments or reuse one after abandoning its generator without termination.
+A channel error never fails the workflow. Workflow dispatches `ChannelError` with the exception. After the first transport delivery failure, `AbstractChannel` stops ordinary delivery for that segment; it does not retry uncertain batches. At termination it attempts pending data, then separately attempts the terminal notification even if that flush failed. Terminal delivery is not retried. A channel serves one segment: every segment builds its own through the factory or the hook, with a fresh stream ID.
 
 Clients detect gaps using sequence numbers, bound fragment buffering, and reconcile from application history on a timeout, disconnect, or incomplete segment. Streamed output is not a durable delivery channel.
 
@@ -354,12 +434,14 @@ use NeuronAI\Testing\FakeChannel;
 
 $channel = new FakeChannel();
 
+// The factory returns the same fake, so the test can read what every segment delivered.
 $agent = Agent::make()
-    ->setStreamAdapter(new VercelAIAdapter())
-    ->setChannel($channel);
+    ->setThreadId('test-thread')
+    ->setStreamAdapter(fn (): VercelAIAdapter => new VercelAIAdapter())
+    ->setChannel(fn (): FakeChannel => $channel);
 $agent->setAiProvider((new FakeAIProvider(new AssistantMessage('Hello world')))->setStreamChunkSize(5));
 
-$state = $agent->stream(new UserMessage('Hi'));
+$state = $agent->chat(new UserMessage('Hi'), stream: true);
 
 $this->assertSame('Hello world', $state->getMessage()->getContent());
 $this->assertNotEmpty($channel->getSent());
@@ -374,3 +456,4 @@ See the **neuron-test** skill for the provider fake and assertion helpers.
 - **Writing nodes, memoization, and durable resume**: the **neuron-workflow** skill.
 - **Approval round trip** (rendering the pending approval, translating client decisions, continuing the run): the **neuron-tool-approval** skill.
 - **Frontend tools executed in the browser** (deferred tools, the endpoint, Vercel `useChat`, the AG-UI client, CopilotKit): the **neuron-frontend-integration** skill.
+- **Laravel or Symfony apps** (controllers, queue jobs and Messenger handlers, Reverb, Mercure and Redis delivery): the **neuron-laravel-integration** and **neuron-symfony-integration** skills.

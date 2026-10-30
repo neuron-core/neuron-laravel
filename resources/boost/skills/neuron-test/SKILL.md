@@ -115,8 +115,9 @@ use NeuronAI\Testing\FakeMiddleware;
 
 $middleware = FakeMiddleware::make();
 
-// Configure custom handlers
-$middleware->setBeforeHandler(function ($node, $event, $state): void {
+// Configure custom handlers; they receive the arguments of before() / after(),
+// including the segment's resources as the fourth
+$middleware->setBeforeHandler(function ($node, $event, $state, $resources): void {
     $state->set('injected_data', 'value');
 });
 
@@ -133,9 +134,10 @@ use NeuronAI\Testing\FakeChannel;
 
 $channel = FakeChannel::make();
 
+// Return the same fake from the factory to inspect every segment's delivery
 $agent = Agent::make()
-    ->setStreamAdapter(new VercelAIAdapter())
-    ->setChannel($channel);
+    ->setStreamAdapter(fn (): VercelAIAdapter => new VercelAIAdapter())
+    ->setChannel(fn (): FakeChannel => $channel);
 
 // Simulate a broken transport: the framework reports the error and keeps the run alive
 $channel->setThrowOnSend(new \RuntimeException('transport down'));
@@ -164,7 +166,7 @@ class MyAgentTest extends TestCase
             new AssistantMessage('Expected response')
         );
 
-        $agent = Agent::make();
+        $agent = Agent::make()->setThreadId('test-thread');
         $agent->setAiProvider($provider);
 
         $message = $agent->chat(new UserMessage('Hello'))->getMessage();
@@ -177,7 +179,7 @@ class MyAgentTest extends TestCase
     {
         $provider = new FakeAIProvider(new AssistantMessage('OK'));
 
-        $agent = Agent::make();
+        $agent = Agent::make()->setThreadId('test-thread');
         $agent->setAiProvider($provider);
         $agent->setInstructions('Always respond in French.');
 
@@ -225,7 +227,7 @@ public function test_agent_executes_tool_and_returns_result(): void
         new AssistantMessage('Based on my search, here are the top PHP frameworks...')
     );
 
-    $agent = Agent::make();
+    $agent = Agent::make()->setThreadId('test-thread');
     $agent->setAiProvider($provider);
     $agent->addTool(new SearchTool());
 
@@ -247,7 +249,7 @@ public function test_agent_streams_response(): void
     $provider = new FakeAIProvider(new AssistantMessage('Hello world'));
     $provider->setStreamChunkSize(5); // Control chunk size for predictable tests
 
-    $agent = Agent::make();
+    $agent = Agent::make()->setThreadId('test-thread');
     $agent->setAiProvider($provider);
 
     $stream = $agent->stream(new UserMessage('Hi'));
@@ -279,7 +281,7 @@ public function test_agent_extracts_structured_data(): void
         new AssistantMessage('{"name": "Alice", "age": 30}')
     );
 
-    $agent = Agent::make();
+    $agent = Agent::make()->setThreadId('test-thread');
     $agent->setAiProvider($provider);
 
     class Person
@@ -325,7 +327,7 @@ class MyRAGTest extends TestCase
             new Document('France is a country in Europe. Its capital is Paris.'),
         ]);
 
-        $rag = RAG::make();
+        $rag = RAG::make()->setThreadId('test-thread');
         $rag->setAiProvider($provider);
         $rag->setEmbeddingsProvider(new FakeEmbeddingsProvider());
         $rag->setVectorStore($vectorStore);
@@ -373,7 +375,7 @@ class MyWorkflowTest extends TestCase
 {
     public function test_workflow_executes_nodes_in_sequence(): void
     {
-        $workflow = Workflow::make()
+        $workflow = Workflow::make(workflowId: 'test-workflow')
             ->addNodes([
                 new FirstNode(),
                 new SecondNode(),
@@ -390,6 +392,7 @@ class MyWorkflowTest extends TestCase
     public function test_workflow_with_initial_state(): void
     {
         $workflow = Workflow::make(
+            workflowId: 'test-workflow',
             state: new WorkflowState(['input' => 'test_value'])
         )->addNodes([
             new ProcessNode(),
@@ -413,7 +416,7 @@ class MyMiddlewareTest extends TestCase
     {
         $middleware = FakeMiddleware::make();
 
-        Workflow::make()
+        Workflow::make(workflowId: 'test-workflow')
             ->addGlobalMiddleware($middleware)
             ->addNodes([new NodeOne(), new NodeTwo(), new NodeThree()])
             ->run();
@@ -428,7 +431,7 @@ class MyMiddlewareTest extends TestCase
     {
         $middleware = FakeMiddleware::make();
 
-        Workflow::make()
+        Workflow::make(workflowId: 'test-workflow')
             ->addMiddleware(NodeTwo::class, $middleware)
             ->addNodes([new NodeOne(), new NodeTwo(), new NodeThree()])
             ->run();
@@ -444,7 +447,7 @@ class MyMiddlewareTest extends TestCase
                 $state->set('injected_by_middleware', true);
             });
 
-        $finalState = Workflow::make()
+        $finalState = Workflow::make(workflowId: 'test-workflow')
             ->addMiddleware(NodeOne::class, $middleware)
             ->addNodes([new NodeOne(), new NodeTwo()])
             ->run();
@@ -457,6 +460,7 @@ class MyMiddlewareTest extends TestCase
 ### Testing Workflow Interruption
 
 ```php
+use NeuronAI\Workflow\Executor\ExecutionRequest;
 use NeuronAI\Workflow\Persistence\InMemoryPersistence;
 
 class MyInterruptTest extends TestCase
@@ -478,7 +482,7 @@ class MyInterruptTest extends TestCase
         $this->assertSame('human input needed', $state->getInterruptRequest()->getMessage());
 
         // Resume with the human answer
-        $finalState = $workflow->resume(['approved' => true])->run();
+        $finalState = $workflow->run(ExecutionRequest::resume(['approved' => true]));
 
         $this->assertFalse($finalState->isInterrupted());
         $this->assertTrue($finalState->get('interruptable_node_executed'));
@@ -536,6 +540,55 @@ class McpIntegrationTest extends TestCase
         $transport->assertReceiveCount(2);
     }
 }
+```
+
+## Testing Agents Built by Application Code
+
+The patterns above hold the Agent in the test. When a controller, job or evaluator builds the Agent, a test reaches it only through the application's container: the fake replaces a binding, so the Agent must take its provider from that binding. Laravel is shown; in Symfony, where the agent is a shared service, see the **neuron-symfony-integration** skill ("Testing").
+
+```php
+class SupportAgent extends Agent
+{
+    public function __construct(protected AIProviderInterface $llm)
+    {
+        parent::__construct();
+    }
+
+    protected function provider(): AIProviderInterface
+    {
+        return $this->llm;
+    }
+}
+
+// Application code resolves the agent through the container
+$agent = app(SupportAgent::class)->for($threadId);
+
+// The test binds one fake instance, drives the application, and asserts on that instance
+$fake = new FakeAIProvider(new AssistantMessage('Hello!'));
+$this->app->instance(AIProviderInterface::class, $fake);
+
+$this->postJson('/support', ['message' => 'Hi'])->assertOk();
+
+$fake->assertCallCount(1);
+```
+
+- An agent built with `SupportAgent::make()` never consults the container, so the test calls the real provider. Build agents through the container wherever tests must reach them.
+- An agent whose `provider()` hook builds its own provider is faked through the container too: call `setAiProvider($fake)` on the agent the container builds and bind that instance. The setter wins over the hook and reaches every `for()` copy (the **neuron-laravel-integration** skill, "Testing").
+- A fake keeps its queued responses and recorded calls on the instance, with no global state. Bind a single instance per test and assert on that object: a binding that builds a new fake on every resolution leaves the test asserting on an instance the application never used.
+- Jobs reach the same binding when the test queue runs them in-process (`sync`); a separate worker process has its own container.
+- To fake at the HTTP level, give the component a client the test controls. Providers, embeddings providers, vector stores, rerankers, MCP transports and the HTTP toolkits accept an `HttpClientInterface`. A framework's own HTTP fake, such as Laravel's `Http::fake()`, only sees requests sent through the framework's client.
+
+```php
+use GuzzleHttp\Handler\MockHandler;
+use GuzzleHttp\HandlerStack;
+use GuzzleHttp\Psr7\Response;
+use NeuronAI\HttpClient\Guzzle\GuzzleHttpClient;
+
+$client = new GuzzleHttpClient(handler: HandlerStack::create(new MockHandler([
+    new Response(200, [], json_encode(['answer' => 'Answer', 'results' => []])),
+])));
+
+$toolkit = TavilyToolkit::make('test-key', httpClient: $client);
 ```
 
 ## Assertion Reference
@@ -671,7 +724,7 @@ public function test_conversation_remembers_context(): void
         new AssistantMessage('The capital of France is Paris.'),
     );
 
-    $agent = Agent::make();
+    $agent = Agent::make()->setThreadId('test-thread');
     $agent->setAiProvider($provider);
 
     $first = $agent->chat(new UserMessage('Hello'))->getMessage();
@@ -791,7 +844,7 @@ $provider->chat(new UserMessage('Hi'));
 ### Hidden Tools Not Sent to Provider
 
 ```php
-// Hidden tools are executable but not sent to AI
+// Hidden tools are neither sent to the AI nor callable
 $agent->addTool((new SecretTool())->visible(false));
 
 // This will NOT include 'secret' in tools configured
