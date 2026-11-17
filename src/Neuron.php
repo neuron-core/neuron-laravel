@@ -11,6 +11,7 @@ use NeuronAI\Exceptions\AgentException;
 use NeuronAI\Providers\AIProviderInterface;
 use NeuronAI\Tools\ToolInterface;
 use NeuronAI\Tools\Toolkits\ToolkitInterface;
+use NeuronAI\UniqueIdGenerator;
 use NeuronAI\Workflow\Middleware\WorkflowMiddleware;
 use NeuronAI\Workflow\NodeInterface;
 
@@ -53,7 +54,9 @@ class Neuron
 
     private function makeAgent(): Agent
     {
-        $agent = Agent::make();
+        // NeuronAI 4 never generates a thread ID: give each call its own, so it
+        // is a new anonymous conversation, as in NeuronAI 3.
+        $agent = Agent::make(workflowId: UniqueIdGenerator::generateId('thread_'));
         $agent->setAiProvider($this->provider);
         if ($this->instructions !== null) {
             $agent->setInstructions($this->instructions);
@@ -72,7 +75,7 @@ class Neuron
         return $this->makeAgent()->chat($message);
     }
 
-    public function stream(mixed $message): Generator|AgentState
+    public function stream(mixed $message): Generator
     {
         return $this->makeAgent()->stream($message);
     }

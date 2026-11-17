@@ -75,6 +75,7 @@ Then use the facade directly in your controllers or services:
 
 ```php
 use NeuronAI\Laravel\Facades\Neuron;
+use NeuronAI\Chat\Messages\Stream\Chunks\TextChunk;
 use NeuronAI\Chat\Messages\UserMessage;
 
 // Chat (synchronous)
@@ -82,13 +83,24 @@ $response = Neuron::chat(new UserMessage('Hello!'))->getMessage();
 echo $response->getContent();
 
 // Stream (real-time chunks)
-foreach (Neuron::stream(new UserMessage('Hello'))->events() as $event) {
-    echo $event->content;
+$stream = Neuron::stream(new UserMessage('Hello'));
+foreach ($stream as $chunk) {
+    if ($chunk instanceof TextChunk) {
+        echo $chunk->content;
+    }
 }
+$state = $stream->getReturn(); // the final AgentState
 
 // Structured output
 $person = Neuron::structured(new UserMessage('I am John and I like pizza!'), Person::class);
 ```
+
+The stream also yields other chunk types (tool calls, reasoning), so filter for the
+ones you print.
+
+NeuronAI 4 addresses every agent by a thread ID. The facade generates one for each
+call, so every call is a new, anonymous conversation and nothing is remembered
+between calls.
 
 ### Customizing a call
 
@@ -114,38 +126,44 @@ $response = Neuron::tools([new SearchTool(), CalculatorToolkit::make()])
 
 Attach **middleware** to specific agent nodes. The first argument is the node
 class (or an array of node classes) the middleware should run on; the second is
-a middleware instance (or an array of instances). Each `Neuron` interaction mode
-is backed by its own node — `ChatNode` for `chat()`, `StreamingNode` for
-`stream()`, `StructuredOutputNode` for `structured()`, and `ToolNode` for tool
-execution — so target the node the middleware is meant to observe:
+a middleware instance (or an array of instances). The interaction modes run on
+these nodes: `ChatNode` for `chat()` and `stream()` (one inference node, buffered
+or streamed), `StructuredOutputNode` for `structured()`, and `ToolNode` for tool
+execution. Target the node the middleware is meant to observe. Here
+`AuditMiddleware` stands for your own class implementing
+`NeuronAI\Workflow\Middleware\WorkflowMiddleware`:
 
 ```php
+use App\Neuron\Middleware\AuditMiddleware;
 use NeuronAI\Laravel\Facades\Neuron;
-use NeuronAI\Agent\Middleware\ToolApproval;
 use NeuronAI\Agent\Nodes\ChatNode;
 use NeuronAI\Agent\Nodes\ToolNode;
 use NeuronAI\Chat\Messages\UserMessage;
 
-// Require human approval before the agent executes any tool
-$response = Neuron::middleware(ToolNode::class, new ToolApproval())
+// Observe every tool execution
+$response = Neuron::middleware(ToolNode::class, new AuditMiddleware())
     ->chat(new UserMessage('Delete the oldest log file'))
     ->getMessage();
 
 // Both arguments accept arrays: attach multiple middleware to multiple nodes
-$neuron = Neuron::middleware([ChatNode::class, ToolNode::class], [new ToolApproval()]);
+$neuron = Neuron::middleware([ChatNode::class, ToolNode::class], [new AuditMiddleware()]);
 
 $response = $neuron->chat(new UserMessage('Delete the oldest log file'))->getMessage();
 ```
+
+To require human approval before a tool runs, set it on the tool itself, for
+example `(new DeleteLogTool())->requireApproval()`; `ToolNode` then pauses the run
+until a decision arrives.
 
 You can chain multiple calls together, and the original facade instance is never
 affected:
 
 ```php
-use NeuronAI\Agent\Middleware\ToolApproval;
+use App\Neuron\Middleware\AuditMiddleware;
 use NeuronAI\Agent\Nodes\ToolNode;
 
 $response = Neuron::tools(new SearchTool())
-    ->middleware(ToolNode::class, new ToolApproval())
+    ->middleware(ToolNode::class, new AuditMiddleware())
     ->chat(new UserMessage('Hello!'))
     ->getMessage();
 

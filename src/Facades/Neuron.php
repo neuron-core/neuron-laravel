@@ -8,8 +8,9 @@ use Illuminate\Support\Facades\Facade;
 
 /**
  * @method static \NeuronAI\Laravel\Neuron tools(\NeuronAI\Tools\ToolInterface|\NeuronAI\Tools\Toolkits\ToolkitInterface|array $tools)
+ * @method static \NeuronAI\Laravel\Neuron middleware(string|array $node, \NeuronAI\Workflow\Middleware\WorkflowMiddleware|array $middleware)
  * @method static \NeuronAI\Agent\AgentState chat(mixed $message)
- * @method static \Generator|\NeuronAI\Agent\AgentState stream(mixed $message)
+ * @method static \Generator stream(mixed $message)
  * @method static mixed structured(mixed $message, string $outputClass)
  */
 class Neuron extends Facade
